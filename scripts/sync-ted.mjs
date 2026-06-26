@@ -15,7 +15,10 @@ const env = fs.existsSync('.env')
     )
   : {};
 
-const setting = (key) => process.env[key] ?? env[key];
+const setting = (key) => {
+  const value = process.env[key] ?? env[key];
+  return value && value.trim() ? value.trim() : undefined;
+};
 const supabaseUrl = setting('EXPO_PUBLIC_SUPABASE_URL');
 const anonKey = setting('EXPO_PUBLIC_SUPABASE_ANON_KEY');
 const projectRef = setting('SUPABASE_PROJECT_REF') ?? 'oqtqngqrelmszofoknqr';

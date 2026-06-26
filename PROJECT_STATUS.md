@@ -130,6 +130,8 @@ npm run functions:deploy
 - Το local test έδειξε ότι ο τρέχων Supabase CLI λογαριασμός δεν έχει δικαίωμα
   αλλαγής secrets, άρα στο GitHub Actions χρειάζεται είτε owner/admin
   `SUPABASE_ACCESS_TOKEN` είτε κοινό σταθερό `EU_INGEST_TOKEN`
+- Διορθώθηκε το handling των optional GitHub secrets ώστε άδειες τιμές να
+  αγνοούνται και να ενεργοποιείται σωστά η αυτόματη δημιουργία ingest token
 
 ## Αρχεία-κλειδιά
 
