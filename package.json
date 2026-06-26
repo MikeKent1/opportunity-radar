@@ -3,20 +3,35 @@
   "version": "1.0.0",
   "main": "index.ts",
   "dependencies": {
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@supabase/supabase-js": "^2.108.2",
     "expo": "~56.0.12",
+    "expo-linear-gradient": "~56.0.4",
     "expo-status-bar": "~56.0.4",
     "react": "19.2.3",
-    "react-native": "0.85.3"
+    "react-dom": "19.2.3",
+    "react-native": "0.85.3",
+    "react-native-url-polyfill": "^3.0.0",
+    "react-native-web": "^0.21.2"
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
+    "supabase": "^2.108.0",
     "typescript": "~6.0.3"
   },
   "scripts": {
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "supabase:login": "supabase login --agent no --output-format text",
+    "supabase:link": "supabase link --project-ref oqtqngqrelmszofoknqr",
+    "db:check": "supabase db push --linked --dry-run",
+    "db:push": "supabase db push --linked",
+    "functions:deploy": "supabase functions deploy sync-opportunities --project-ref oqtqngqrelmszofoknqr",
+    "eu:sync": "node scripts/sync-eu-funding.mjs",
+    "ted:sync": "node scripts/sync-ted.mjs",
+    "eu-ted:sync": "npm run eu:sync && npm run ted:sync"
   },
   "private": true
 }

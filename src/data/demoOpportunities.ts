@@ -1,0 +1,55 @@
+import { Opportunity } from '../types';
+
+export const demoOpportunities: Opportunity[] = [
+  {
+    id: 'demo-grant-1',
+    external_id: 'demo-grant-1',
+    source: 'grants',
+    title: 'Climate Innovation Fund',
+    organization: 'European Green Initiative',
+    summary:
+      'Χρηματοδότηση για ομάδες που αναπτύσσουν πρακτικές λύσεις γύρω από το κλίμα, την ενέργεια και τις βιώσιμες πόλεις.',
+    url: 'https://www.grants.gov/',
+    image_url: null,
+    amount: 75000,
+    currency: 'USD',
+    deadline: '2026-09-30T23:59:59Z',
+    tags: ['Climate', 'Innovation'],
+    status: 'active',
+    published_at: '2026-06-20T10:00:00Z',
+  },
+  {
+    id: 'demo-giveaway-1',
+    external_id: 'demo-giveaway-1',
+    source: 'gamerpower',
+    title: 'Free PC Game Giveaway',
+    organization: 'GamerPower',
+    summary:
+      'Ένα πλήρες creator setup με κάμερα, μικρόφωνο και φωτισμό για το επόμενο μεγάλο σου project.',
+    url: 'https://www.gamerpower.com/',
+    image_url: 'https://www.gamerpower.com/favicon.ico',
+    amount: 29.99,
+    currency: 'USD',
+    deadline: '2026-07-18T23:59:59Z',
+    tags: ['Game', 'PC'],
+    status: 'active',
+    published_at: '2026-06-23T10:00:00Z',
+  },
+  {
+    id: 'demo-grant-2',
+    external_id: 'demo-grant-2',
+    source: 'grants',
+    title: 'Digital Communities Grant',
+    organization: 'Community Tech Network',
+    summary:
+      'Πρόγραμμα για ψηφιακά εργαλεία που κάνουν τις τοπικές κοινότητες πιο προσβάσιμες, ανθεκτικές και συνδεδεμένες.',
+    url: 'https://www.grants.gov/',
+    image_url: null,
+    amount: 120000,
+    currency: 'USD',
+    deadline: '2026-10-12T23:59:59Z',
+    tags: ['Community', 'Technology'],
+    status: 'active',
+    published_at: '2026-06-18T10:00:00Z',
+  },
+];
