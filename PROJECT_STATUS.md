@@ -172,6 +172,8 @@ npm run functions:deploy
   `SUPABASE_SERVICE_ROLE_KEY`
 - Εκκρεμεί να εφαρμοστεί η migration `20260626130000_add_kaggle_source.sql`
   στη remote βάση πριν τρέξει επιτυχώς το Kaggle import
+- Μετά το πρώτο import διορθώθηκε ο Kaggle parser ώστε να παράγει καθαρούς
+  τίτλους από το competition slug, σωστά URLs και ποσά από reward strings
 
 ## Αρχεία-κλειδιά
 

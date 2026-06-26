@@ -75,9 +75,27 @@ const firstPresent = (item, keys) => {
   return '';
 };
 
+const competitionSlug = (ref) => {
+  const value = text(ref);
+  if (!value) return '';
+  try {
+    const url = new URL(value);
+    return url.pathname.split('/').filter(Boolean).pop() ?? value;
+  } catch {
+    return value.split('/').filter(Boolean).pop() ?? value;
+  }
+};
+
+const titleFromSlug = (slug) =>
+  text(slug)
+    .replace(/[-_]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (letter) => letter.toLocaleUpperCase('en-US'));
+
 const amountFromReward = (reward) => {
   const normalized = text(reward).replace(/,/g, '');
-  const match = normalized.match(/\$([0-9]+(?:\.[0-9]+)?)/);
+  const match = normalized.match(/(?:\$)?([0-9]+(?:\.[0-9]+)?)\s*(?:usd|us\$|dollars?)?/i);
   if (!match) return null;
   const amount = Number(match[1]);
   return Number.isFinite(amount) && amount > 0 ? amount : null;
@@ -85,7 +103,8 @@ const amountFromReward = (reward) => {
 
 const opportunities = rows.flatMap((item, index) => {
   const ref = firstPresent(item, ['ref', 'slug', 'id']) || `kaggle-${index}`;
-  const title = firstPresent(item, ['title', 'name']) || 'Kaggle competition';
+  const slug = competitionSlug(ref);
+  const title = firstPresent(item, ['title', 'name']) || titleFromSlug(slug) || 'Kaggle competition';
   const deadlineRaw = firstPresent(item, ['deadline', 'deadlineDate', 'deadlineTime']);
   const deadline = deadlineRaw ? new Date(deadlineRaw) : null;
   const reward = firstPresent(item, ['reward', 'prize', 'totalPrize']);
@@ -93,7 +112,9 @@ const opportunities = rows.flatMap((item, index) => {
   const teamCount = firstPresent(item, ['teamCount', 'teamsCount', 'numberOfTeams']);
   const url =
     firstPresent(item, ['url', 'competitionUrl']) ||
-    `https://www.kaggle.com/competitions/${encodeURIComponent(ref)}`;
+    (ref.startsWith('http')
+      ? ref
+      : `https://www.kaggle.com/competitions/${encodeURIComponent(slug || ref)}`);
 
   return [
     {
