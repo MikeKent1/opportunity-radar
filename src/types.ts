@@ -5,6 +5,7 @@ export type OpportunitySource =
   | 'freetogame'
   | 'cheapshark'
   | 'producthunt'
+  | 'kaggle'
   | 'eufunding'
   | 'ted'
   | 'grants';

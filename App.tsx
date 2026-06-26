@@ -24,13 +24,21 @@ import {
   syncExternalOpportunities,
 } from './src/services/opportunities';
 
-type Filter = 'all' | 'giveaways' | 'freetoplay' | 'launches' | 'grants' | 'tenders';
+type Filter =
+  | 'all'
+  | 'giveaways'
+  | 'freetoplay'
+  | 'launches'
+  | 'competitions'
+  | 'grants'
+  | 'tenders';
 
 const filters: { id: Filter; label: string }[] = [
   { id: 'all', label: 'Όλα' },
   { id: 'giveaways', label: 'Giveaways' },
   { id: 'freetoplay', label: 'Free to Play' },
   { id: 'launches', label: 'Launches' },
+  { id: 'competitions', label: 'Competitions' },
   { id: 'grants', label: 'Grants' },
   { id: 'tenders', label: 'Tenders' },
 ];
@@ -72,6 +80,7 @@ export default function App() {
         opportunity.source === filter ||
         (filter === 'tenders' && opportunity.source === 'ted') ||
         (filter === 'launches' && opportunity.source === 'producthunt') ||
+        (filter === 'competitions' && opportunity.source === 'kaggle') ||
         (filter === 'grants' &&
           (opportunity.source === 'grants' || opportunity.source === 'eufunding')) ||
         (filter === 'freetoplay' && opportunity.source === 'freetogame') ||

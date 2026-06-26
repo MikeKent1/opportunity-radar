@@ -32,7 +32,8 @@
     "eu:sync": "node scripts/sync-eu-funding.mjs",
     "ted:sync": "node scripts/sync-ted.mjs",
     "producthunt:sync": "node scripts/sync-product-hunt.mjs",
-    "scheduled:sync": "npm run eu:sync && npm run ted:sync && npm run producthunt:sync",
+    "kaggle:sync": "node scripts/sync-kaggle.mjs",
+    "scheduled:sync": "npm run eu:sync && npm run ted:sync && npm run producthunt:sync && npm run kaggle:sync",
     "eu-ted:sync": "npm run scheduled:sync"
   },
   "private": true
