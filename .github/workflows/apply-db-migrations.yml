@@ -10,6 +10,7 @@ jobs:
     timeout-minutes: 10
 
     env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
       SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
 
     steps:
@@ -28,7 +29,11 @@ jobs:
       - name: Apply migrations
         shell: bash
         run: |
-          ENCODED_PASSWORD="$(python -c 'import os, urllib.parse; print(urllib.parse.quote(os.environ["SUPABASE_DB_PASSWORD"], safe=""))')"
-          DB_URL="postgresql://postgres:${ENCODED_PASSWORD}@db.oqtqngqrelmszofoknqr.supabase.co:5432/postgres"
+          if [ -n "$SUPABASE_DB_URL" ]; then
+            DB_URL="$SUPABASE_DB_URL"
+          else
+            ENCODED_PASSWORD="$(python -c 'import os, urllib.parse; print(urllib.parse.quote(os.environ["SUPABASE_DB_PASSWORD"], safe=""))')"
+            DB_URL="postgresql://postgres:${ENCODED_PASSWORD}@db.oqtqngqrelmszofoknqr.supabase.co:5432/postgres"
+          fi
 
           npx supabase db push --db-url "$DB_URL"

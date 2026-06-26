@@ -41,7 +41,20 @@ npm run db:push
 
 Αν ο τοπικός Supabase CLI λογαριασμός δεν έχει Management API privileges,
 υπάρχει και manual GitHub Actions workflow `.github/workflows/apply-db-migrations.yml`.
-Για να λειτουργήσει, πρόσθεσε GitHub secret:
+Για να λειτουργήσει από GitHub Actions, προτίμησε το IPv4 Transaction Pooler
+connection string από:
+
+```txt
+Supabase → Connect → Transaction pooler
+```
+
+και πρόσθεσέ το ως GitHub secret:
+
+```bash
+SUPABASE_DB_URL
+```
+
+Εναλλακτικά, για local/direct χρήση μπορείς να κρατήσεις μόνο:
 
 ```bash
 SUPABASE_DB_PASSWORD
@@ -104,6 +117,7 @@ GitHub Actions.
 EXPO_PUBLIC_SUPABASE_URL
 EXPO_PUBLIC_SUPABASE_ANON_KEY
 SUPABASE_SERVICE_ROLE_KEY
+SUPABASE_DB_URL
 SUPABASE_DB_PASSWORD
 PRODUCT_HUNT_API_KEY
 PRODUCT_HUNT_API_SECRET
