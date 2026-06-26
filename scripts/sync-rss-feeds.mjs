@@ -28,19 +28,7 @@ const feedUrls = (setting('RSS_FEED_URLS') ?? '')
   .map((url) => url.trim())
   .filter(Boolean);
 
-const keywords = (setting('RSS_KEYWORDS') ?? [
-  'giveaway',
-  'free',
-  'grant',
-  'funding',
-  'tender',
-  'competition',
-  'hackathon',
-  'challenge',
-  'prize',
-  'startup',
-  'launch',
-].join(','))
+const keywords = (setting('RSS_KEYWORDS') ?? '')
   .split(',')
   .map((keyword) => keyword.trim().toLocaleLowerCase('en-US'))
   .filter(Boolean);

@@ -183,6 +183,8 @@ npm run functions:deploy
 - Η εφαρμογή έχει νέο φίλτρο `Feeds`
 - Ο συγχρονισμός διαβάζει URLs από το GitHub secret `RSS_FEED_URLS`
 - Υποστηρίζεται optional keyword filtering μέσω `RSS_KEYWORDS`
+- Το keyword filtering εφαρμόζεται μόνο όταν υπάρχει `RSS_KEYWORDS`, επειδή οι
+  ίδιες οι RSS πηγές είναι ήδη curated
 - Τα feed items αποθηκεύονται απευθείας στη Supabase μέσω
   `SUPABASE_SERVICE_ROLE_KEY`
 - Αν δεν υπάρχει `RSS_FEED_URLS`, το script ολοκληρώνεται χωρίς error και
