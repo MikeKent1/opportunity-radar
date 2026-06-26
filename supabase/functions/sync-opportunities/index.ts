@@ -799,7 +799,16 @@ Deno.serve(async (request) => {
     if (body.ingest_provider === 'eufunding' || body.ingest_provider === 'ted') {
       const providedToken = request.headers.get('X-EU-Ingest-Token');
       const expectedToken = Deno.env.get('EU_INGEST_TOKEN');
-      if (!expectedToken || providedToken !== expectedToken) {
+      const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+      const providedBearer = authHeader.replace(/^Bearer\s+/i, '');
+      const hasValidIngestToken = Boolean(
+        expectedToken && providedToken === expectedToken,
+      );
+      const hasServiceRoleAuthorization = Boolean(
+        serviceRoleKey && providedBearer === serviceRoleKey,
+      );
+
+      if (!hasValidIngestToken && !hasServiceRoleAuthorization) {
         return new Response(JSON.stringify({ error: 'Invalid ingest token' }), {
           status: 403,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },

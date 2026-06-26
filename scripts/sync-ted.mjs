@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
+import { createClient } from '@supabase/supabase-js';
 
 const env = fs.existsSync('.env')
   ? Object.fromEntries(
@@ -21,9 +22,12 @@ const setting = (key) => {
 };
 const supabaseUrl = setting('EXPO_PUBLIC_SUPABASE_URL');
 const anonKey = setting('EXPO_PUBLIC_SUPABASE_ANON_KEY');
+const serviceRoleKey = setting('SUPABASE_SERVICE_ROLE_KEY');
 const projectRef = setting('SUPABASE_PROJECT_REF') ?? 'oqtqngqrelmszofoknqr';
-if (!supabaseUrl || !anonKey) {
-  throw new Error('Missing EXPO_PUBLIC_SUPABASE_URL or EXPO_PUBLIC_SUPABASE_ANON_KEY');
+if (!supabaseUrl || (!anonKey && !serviceRoleKey)) {
+  throw new Error(
+    'Missing EXPO_PUBLIC_SUPABASE_URL and either EXPO_PUBLIC_SUPABASE_ANON_KEY or SUPABASE_SERVICE_ROLE_KEY',
+  );
 }
 
 const rotateIngestToken = () => {
@@ -44,7 +48,7 @@ const rotateIngestToken = () => {
   return token;
 };
 
-const token = setting('EU_INGEST_TOKEN') ?? rotateIngestToken();
+const token = serviceRoleKey ? undefined : setting('EU_INGEST_TOKEN') ?? rotateIngestToken();
 
 const fields = [
   'publication-number',
@@ -131,16 +135,35 @@ const opportunities = (payload.notices ?? []).flatMap((item, index) => {
   }];
 });
 
-const ingestResponse = await fetch(`${supabaseUrl}/functions/v1/sync-opportunities`, {
-  method: 'POST',
-  headers: {
-    apikey: anonKey,
-    Authorization: `Bearer ${anonKey}`,
-    'Content-Type': 'application/json',
-    'X-EU-Ingest-Token': token,
-  },
-  body: JSON.stringify({ ingest_provider: 'ted', opportunities }),
-});
-const result = await ingestResponse.json();
-if (!ingestResponse.ok) throw new Error(JSON.stringify(result));
-console.log(JSON.stringify(result));
+if (serviceRoleKey) {
+  const supabase = createClient(supabaseUrl, serviceRoleKey);
+  const { error: closeError } = await supabase
+    .from('opportunities')
+    .update({ status: 'closed' })
+    .eq('source', 'ted')
+    .eq('status', 'active');
+  if (closeError) throw closeError;
+
+  if (opportunities.length > 0) {
+    const { error: upsertError } = await supabase
+      .from('opportunities')
+      .upsert(opportunities, { onConflict: 'source,external_id' });
+    if (upsertError) throw upsertError;
+  }
+
+  console.log(JSON.stringify({ imported: opportunities.length, providers: ['ted'] }));
+} else {
+  const ingestResponse = await fetch(`${supabaseUrl}/functions/v1/sync-opportunities`, {
+    method: 'POST',
+    headers: {
+      apikey: anonKey,
+      Authorization: `Bearer ${anonKey}`,
+      'Content-Type': 'application/json',
+      ...(token ? { 'X-EU-Ingest-Token': token } : {}),
+    },
+    body: JSON.stringify({ ingest_provider: 'ted', opportunities }),
+  });
+  const result = await ingestResponse.json();
+  if (!ingestResponse.ok) throw new Error(JSON.stringify(result));
+  console.log(JSON.stringify(result));
+}

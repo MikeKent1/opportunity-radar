@@ -92,6 +92,7 @@ GitHub Actions.
 ```bash
 EXPO_PUBLIC_SUPABASE_URL
 EXPO_PUBLIC_SUPABASE_ANON_KEY
+SUPABASE_SERVICE_ROLE_KEY
 ```
 
 Για την προστασία του ingest endpoint χρειάζεται ένα από τα παρακάτω:
@@ -110,6 +111,11 @@ EU_INGEST_TOKEN
 τα scripts ανανεώνουν αυτόματα το προστατευτικό `EU_INGEST_TOKEN` πριν από κάθε
 ingest. Αν δεν υπάρχει τέτοιο access token, μπορείς να βάλεις σταθερό
 `EU_INGEST_TOKEN` και στα GitHub Secrets και στα Supabase Edge Function secrets.
+
+Η προτεινόμενη λύση για GitHub Actions είναι το `SUPABASE_SERVICE_ROLE_KEY`.
+Με αυτό, τα EU/TED scripts γράφουν κατευθείαν στον πίνακα `opportunities` με
+server-side δικαιώματα, χωρίς να χρειάζεται να αλλάζουν Supabase secrets από το
+CLI και χωρίς να περνούν από το `EU_INGEST_TOKEN`.
 
 ## 4. Deploy της function
 

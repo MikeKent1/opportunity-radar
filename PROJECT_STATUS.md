@@ -132,6 +132,12 @@ npm run functions:deploy
   `SUPABASE_ACCESS_TOKEN` είτε κοινό σταθερό `EU_INGEST_TOKEN`
 - Διορθώθηκε το handling των optional GitHub secrets ώστε άδειες τιμές να
   αγνοούνται και να ενεργοποιείται σωστά η αυτόματη δημιουργία ingest token
+- Προστέθηκε πιο σταθερό path για GitHub Actions με `SUPABASE_SERVICE_ROLE_KEY`,
+  ώστε το EU/TED ingest να γίνεται απευθείας στον πίνακα `opportunities` από τα
+  scripts και να μη χρειάζεται αλλαγή Supabase secrets από CLI
+- Το deploy της Edge Function από τον τρέχοντα CLI λογαριασμό μπλοκάρεται από
+  Supabase permissions, οπότε το scheduled EU/TED sync δεν βασίζεται πλέον σε
+  νέο Edge Function deploy
 
 ## Αρχεία-κλειδιά
 
