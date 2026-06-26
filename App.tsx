@@ -24,12 +24,13 @@ import {
   syncExternalOpportunities,
 } from './src/services/opportunities';
 
-type Filter = 'all' | 'giveaways' | 'freetoplay' | 'grants' | 'tenders';
+type Filter = 'all' | 'giveaways' | 'freetoplay' | 'launches' | 'grants' | 'tenders';
 
 const filters: { id: Filter; label: string }[] = [
   { id: 'all', label: 'Όλα' },
   { id: 'giveaways', label: 'Giveaways' },
   { id: 'freetoplay', label: 'Free to Play' },
+  { id: 'launches', label: 'Launches' },
   { id: 'grants', label: 'Grants' },
   { id: 'tenders', label: 'Tenders' },
 ];
@@ -70,6 +71,7 @@ export default function App() {
         filter === 'all' ||
         opportunity.source === filter ||
         (filter === 'tenders' && opportunity.source === 'ted') ||
+        (filter === 'launches' && opportunity.source === 'producthunt') ||
         (filter === 'grants' &&
           (opportunity.source === 'grants' || opportunity.source === 'eufunding')) ||
         (filter === 'freetoplay' && opportunity.source === 'freetogame') ||
@@ -152,7 +154,7 @@ export default function App() {
                 <Text style={styles.heroKicker}>CURATED FOR BUILDERS</Text>
                 <Text style={styles.heroTitle}>Giveaways και grants, χωρίς το ψάξιμο.</Text>
                 <Text style={styles.heroBody}>
-                  Ένα ζωντανό feed από GamerPower, Epic Games, Grants.gov και το Supabase.
+                  Ένα ζωντανό feed από giveaways, grants, tenders και startup launches.
                 </Text>
 
                 <View style={styles.heroStats}>

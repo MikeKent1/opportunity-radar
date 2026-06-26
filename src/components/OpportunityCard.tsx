@@ -29,6 +29,7 @@ export function OpportunityCard({ opportunity }: { opportunity: Opportunity }) {
   const amount = formatAmount(opportunity.amount, opportunity.currency);
   const isGrant =
     opportunity.source === 'grants' || opportunity.source === 'eufunding';
+  const isLaunch = opportunity.source === 'producthunt';
   const sourceLabel =
     opportunity.source === 'gamerpower'
       ? 'GAMERPOWER'
@@ -42,6 +43,8 @@ export function OpportunityCard({ opportunity }: { opportunity: Opportunity }) {
               ? 'EU GRANT'
               : opportunity.source === 'ted'
                 ? 'EU TENDER'
+                : opportunity.source === 'producthunt'
+                  ? 'PRODUCT HUNT'
         : isGrant
           ? 'GRANT'
           : 'GIVEAWAY';
@@ -53,7 +56,13 @@ export function OpportunityCard({ opportunity }: { opportunity: Opportunity }) {
       style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
     >
       <LinearGradient
-        colors={isGrant ? ['#142526', '#101819'] : ['#201F18', '#111817']}
+        colors={
+          isGrant
+            ? ['#142526', '#101819']
+            : isLaunch
+              ? ['#261C17', '#111817']
+              : ['#201F18', '#111817']
+        }
         style={styles.cardGradient}
       >
         {opportunity.image_url && (
@@ -65,8 +74,18 @@ export function OpportunityCard({ opportunity }: { opportunity: Opportunity }) {
           />
         )}
         <View style={styles.cardTop}>
-          <View style={[styles.sourceBadge, isGrant ? styles.grantBadge : styles.giveawayBadge]}>
-            <Text style={[styles.sourceText, isGrant ? styles.grantText : styles.giveawayText]}>
+          <View
+            style={[
+              styles.sourceBadge,
+              isGrant ? styles.grantBadge : isLaunch ? styles.launchBadge : styles.giveawayBadge,
+            ]}
+          >
+            <Text
+              style={[
+                styles.sourceText,
+                isGrant ? styles.grantText : isLaunch ? styles.launchText : styles.giveawayText,
+              ]}
+            >
               {sourceLabel}
             </Text>
           </View>
@@ -94,13 +113,17 @@ export function OpportunityCard({ opportunity }: { opportunity: Opportunity }) {
                 ? 'ΕΩΣ'
                 : opportunity.source === 'freetogame'
                   ? 'ΜΟΝΤΕΛΟ'
-                  : opportunity.source === 'ted'
-                    ? 'ΕΚΤΙΜΩΜΕΝΗ ΑΞΙΑ'
+                : opportunity.source === 'ted'
+                  ? 'ΕΚΤΙΜΩΜΕΝΗ ΑΞΙΑ'
+                  : opportunity.source === 'producthunt'
+                    ? 'ΤΥΠΟΣ'
                     : 'ΑΞΙΑ'}
             </Text>
             <Text style={styles.value}>
               {opportunity.source === 'freetogame'
                 ? 'Δωρεάν παιχνίδι'
+                : opportunity.source === 'producthunt'
+                  ? 'Launch'
                 : amount ?? 'Δες λεπτομέρειες'}
             </Text>
           </View>
@@ -133,9 +156,11 @@ const styles = StyleSheet.create({
   sourceBadge: { paddingHorizontal: 9, paddingVertical: 5, borderRadius: 7 },
   grantBadge: { backgroundColor: '#193C39' },
   giveawayBadge: { backgroundColor: '#3B3B1B' },
+  launchBadge: { backgroundColor: '#4A251B' },
   sourceText: { fontSize: 9, fontWeight: '900', letterSpacing: 1 },
   grantText: { color: '#7DE0CF' },
   giveawayText: { color: '#D9FF57' },
+  launchText: { color: '#FF8A63' },
   deadline: { color: '#849395', fontSize: 11, fontWeight: '600' },
   organization: { color: '#7DA19D', fontSize: 11, marginTop: 18, fontWeight: '700' },
   title: {

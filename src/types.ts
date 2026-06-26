@@ -4,6 +4,7 @@ export type OpportunitySource =
   | 'epicgames'
   | 'freetogame'
   | 'cheapshark'
+  | 'producthunt'
   | 'eufunding'
   | 'ted'
   | 'grants';

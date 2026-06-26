@@ -31,7 +31,9 @@
     "functions:deploy": "supabase functions deploy sync-opportunities --project-ref oqtqngqrelmszofoknqr",
     "eu:sync": "node scripts/sync-eu-funding.mjs",
     "ted:sync": "node scripts/sync-ted.mjs",
-    "eu-ted:sync": "npm run eu:sync && npm run ted:sync"
+    "producthunt:sync": "node scripts/sync-product-hunt.mjs",
+    "scheduled:sync": "npm run eu:sync && npm run ted:sync && npm run producthunt:sync",
+    "eu-ted:sync": "npm run scheduled:sync"
   },
   "private": true
 }
