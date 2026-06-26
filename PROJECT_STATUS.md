@@ -209,6 +209,18 @@ npm run functions:deploy
 - Εκκρεμεί να εφαρμοστεί η migration `20260626150000_add_reddit_source.sql`
   στη remote βάση πριν τρέξει επιτυχώς το Reddit import
 
+## Resilient scheduled sync
+
+- Προστέθηκε ενιαίο script `scripts/sync-all.mjs`
+- Το `npm run scheduled:sync` δεν είναι πλέον αλυσίδα `&&`, αλλά runner που
+  εκτελεί κάθε provider ξεχωριστά
+- Το GitHub Actions summary δείχνει status, imported count, duration και notes
+  ανά provider
+- Στο default resilient mode το workflow αποτυγχάνει μόνο αν αποτύχουν όλοι οι
+  providers
+- Τα logs κάνουν redaction σε γνωστά secrets και bearer/basic tokens
+- Υπάρχει strict mode με `npm run scheduled:sync:strict`
+
 ## Αρχεία-κλειδιά
 
 - `App.tsx`: κεντρικό UI και συμπεριφορά εφαρμογής
