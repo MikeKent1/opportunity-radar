@@ -8,6 +8,7 @@
     "expo": "~56.0.12",
     "expo-linear-gradient": "~56.0.4",
     "expo-status-bar": "~56.0.4",
+    "fast-xml-parser": "^5.9.3",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-native": "0.85.3",
@@ -33,7 +34,8 @@
     "ted:sync": "node scripts/sync-ted.mjs",
     "producthunt:sync": "node scripts/sync-product-hunt.mjs",
     "kaggle:sync": "node scripts/sync-kaggle.mjs",
-    "scheduled:sync": "npm run eu:sync && npm run ted:sync && npm run producthunt:sync && npm run kaggle:sync",
+    "rss:sync": "node scripts/sync-rss-feeds.mjs",
+    "scheduled:sync": "npm run eu:sync && npm run ted:sync && npm run producthunt:sync && npm run kaggle:sync && npm run rss:sync",
     "eu-ted:sync": "npm run scheduled:sync"
   },
   "private": true

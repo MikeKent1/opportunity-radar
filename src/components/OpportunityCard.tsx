@@ -31,6 +31,7 @@ export function OpportunityCard({ opportunity }: { opportunity: Opportunity }) {
     opportunity.source === 'grants' || opportunity.source === 'eufunding';
   const isLaunch = opportunity.source === 'producthunt';
   const isCompetition = opportunity.source === 'kaggle';
+  const isFeed = opportunity.source === 'rss';
   const sourceLabel =
     opportunity.source === 'gamerpower'
       ? 'GAMERPOWER'
@@ -48,6 +49,8 @@ export function OpportunityCard({ opportunity }: { opportunity: Opportunity }) {
                   ? 'PRODUCT HUNT'
                   : opportunity.source === 'kaggle'
                     ? 'KAGGLE'
+                    : opportunity.source === 'rss'
+                      ? 'CURATED FEED'
         : isGrant
           ? 'GRANT'
           : 'GIVEAWAY';
@@ -66,6 +69,8 @@ export function OpportunityCard({ opportunity }: { opportunity: Opportunity }) {
               ? ['#261C17', '#111817']
               : isCompetition
                 ? ['#172033', '#101419']
+                : isFeed
+                  ? ['#1D1C2E', '#101419']
               : ['#201F18', '#111817']
         }
         style={styles.cardGradient}
@@ -84,6 +89,7 @@ export function OpportunityCard({ opportunity }: { opportunity: Opportunity }) {
               styles.sourceBadge,
               isGrant ? styles.grantBadge : isLaunch ? styles.launchBadge : styles.giveawayBadge,
               isCompetition && styles.competitionBadge,
+              isFeed && styles.feedBadge,
             ]}
           >
             <Text
@@ -95,6 +101,8 @@ export function OpportunityCard({ opportunity }: { opportunity: Opportunity }) {
                     ? styles.launchText
                     : isCompetition
                       ? styles.competitionText
+                      : isFeed
+                        ? styles.feedText
                       : styles.giveawayText,
               ]}
             >
@@ -131,6 +139,8 @@ export function OpportunityCard({ opportunity }: { opportunity: Opportunity }) {
                     ? 'ΤΥΠΟΣ'
                     : opportunity.source === 'kaggle'
                       ? 'ΒΡΑΒΕΙΟ'
+                      : opportunity.source === 'rss'
+                        ? 'ΠΗΓΗ'
                     : 'ΑΞΙΑ'}
             </Text>
             <Text style={styles.value}>
@@ -138,6 +148,8 @@ export function OpportunityCard({ opportunity }: { opportunity: Opportunity }) {
                 ? 'Δωρεάν παιχνίδι'
                 : opportunity.source === 'producthunt'
                   ? 'Launch'
+                  : opportunity.source === 'rss'
+                    ? 'Άρθρο / ευκαιρία'
                 : amount ?? 'Δες λεπτομέρειες'}
             </Text>
           </View>
@@ -172,11 +184,13 @@ const styles = StyleSheet.create({
   giveawayBadge: { backgroundColor: '#3B3B1B' },
   launchBadge: { backgroundColor: '#4A251B' },
   competitionBadge: { backgroundColor: '#1C2D51' },
+  feedBadge: { backgroundColor: '#2C2757' },
   sourceText: { fontSize: 9, fontWeight: '900', letterSpacing: 1 },
   grantText: { color: '#7DE0CF' },
   giveawayText: { color: '#D9FF57' },
   launchText: { color: '#FF8A63' },
   competitionText: { color: '#76B7FF' },
+  feedText: { color: '#B9A7FF' },
   deadline: { color: '#849395', fontSize: 11, fontWeight: '600' },
   organization: { color: '#7DA19D', fontSize: 11, marginTop: 18, fontWeight: '700' },
   title: {

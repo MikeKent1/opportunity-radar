@@ -6,6 +6,7 @@ export type OpportunitySource =
   | 'cheapshark'
   | 'producthunt'
   | 'kaggle'
+  | 'rss'
   | 'eufunding'
   | 'ted'
   | 'grants';
