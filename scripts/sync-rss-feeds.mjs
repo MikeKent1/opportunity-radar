@@ -51,6 +51,7 @@ const array = (value) => {
 
 const text = (value) => {
   if (value == null) return '';
+  if (Array.isArray(value)) return text(value[0]);
   if (typeof value === 'object') {
     if ('text' in value) return text(value.text);
     if ('#text' in value) return text(value['#text']);

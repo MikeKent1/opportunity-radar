@@ -191,6 +191,8 @@ npm run functions:deploy
   εισάγει 0 εγγραφές
 - Εκκρεμεί να εφαρμοστεί η migration `20260626140000_add_rss_source.sql`
   στη remote βάση πριν τρέξει επιτυχώς το RSS import
+- Μετά το πρώτο import διορθώθηκε ο RSS parser για nested Atom/RSS πεδία που
+  επιστρέφουν arrays με `{ text }`
 
 ## Αρχεία-κλειδιά
 
