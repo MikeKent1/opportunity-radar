@@ -32,6 +32,7 @@ export function OpportunityCard({ opportunity }: { opportunity: Opportunity }) {
   const isLaunch = opportunity.source === 'producthunt';
   const isCompetition = opportunity.source === 'kaggle';
   const isFeed = opportunity.source === 'rss';
+  const isCommunity = opportunity.source === 'reddit';
   const sourceLabel =
     opportunity.source === 'gamerpower'
       ? 'GAMERPOWER'
@@ -51,6 +52,8 @@ export function OpportunityCard({ opportunity }: { opportunity: Opportunity }) {
                     ? 'KAGGLE'
                     : opportunity.source === 'rss'
                       ? 'CURATED FEED'
+                      : opportunity.source === 'reddit'
+                        ? 'REDDIT'
         : isGrant
           ? 'GRANT'
           : 'GIVEAWAY';
@@ -71,6 +74,8 @@ export function OpportunityCard({ opportunity }: { opportunity: Opportunity }) {
                 ? ['#172033', '#101419']
                 : isFeed
                   ? ['#1D1C2E', '#101419']
+                  : isCommunity
+                    ? ['#2A1B17', '#111817']
               : ['#201F18', '#111817']
         }
         style={styles.cardGradient}
@@ -90,6 +95,7 @@ export function OpportunityCard({ opportunity }: { opportunity: Opportunity }) {
               isGrant ? styles.grantBadge : isLaunch ? styles.launchBadge : styles.giveawayBadge,
               isCompetition && styles.competitionBadge,
               isFeed && styles.feedBadge,
+              isCommunity && styles.communityBadge,
             ]}
           >
             <Text
@@ -103,6 +109,8 @@ export function OpportunityCard({ opportunity }: { opportunity: Opportunity }) {
                       ? styles.competitionText
                       : isFeed
                         ? styles.feedText
+                        : isCommunity
+                          ? styles.communityText
                       : styles.giveawayText,
               ]}
             >
@@ -141,6 +149,8 @@ export function OpportunityCard({ opportunity }: { opportunity: Opportunity }) {
                       ? 'ΒΡΑΒΕΙΟ'
                       : opportunity.source === 'rss'
                         ? 'ΠΗΓΗ'
+                        : opportunity.source === 'reddit'
+                          ? 'ΚΟΙΝΟΤΗΤΑ'
                     : 'ΑΞΙΑ'}
             </Text>
             <Text style={styles.value}>
@@ -150,6 +160,8 @@ export function OpportunityCard({ opportunity }: { opportunity: Opportunity }) {
                   ? 'Launch'
                   : opportunity.source === 'rss'
                     ? 'Άρθρο / ευκαιρία'
+                    : opportunity.source === 'reddit'
+                      ? opportunity.organization
                 : amount ?? 'Δες λεπτομέρειες'}
             </Text>
           </View>
@@ -185,12 +197,14 @@ const styles = StyleSheet.create({
   launchBadge: { backgroundColor: '#4A251B' },
   competitionBadge: { backgroundColor: '#1C2D51' },
   feedBadge: { backgroundColor: '#2C2757' },
+  communityBadge: { backgroundColor: '#4A251B' },
   sourceText: { fontSize: 9, fontWeight: '900', letterSpacing: 1 },
   grantText: { color: '#7DE0CF' },
   giveawayText: { color: '#D9FF57' },
   launchText: { color: '#FF8A63' },
   competitionText: { color: '#76B7FF' },
   feedText: { color: '#B9A7FF' },
+  communityText: { color: '#FF8A63' },
   deadline: { color: '#849395', fontSize: 11, fontWeight: '600' },
   organization: { color: '#7DA19D', fontSize: 11, marginTop: 18, fontWeight: '700' },
   title: {

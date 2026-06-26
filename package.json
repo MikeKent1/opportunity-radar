@@ -35,7 +35,8 @@
     "producthunt:sync": "node scripts/sync-product-hunt.mjs",
     "kaggle:sync": "node scripts/sync-kaggle.mjs",
     "rss:sync": "node scripts/sync-rss-feeds.mjs",
-    "scheduled:sync": "npm run eu:sync && npm run ted:sync && npm run producthunt:sync && npm run kaggle:sync && npm run rss:sync",
+    "reddit:sync": "node scripts/sync-reddit.mjs",
+    "scheduled:sync": "npm run eu:sync && npm run ted:sync && npm run producthunt:sync && npm run kaggle:sync && npm run rss:sync && npm run reddit:sync",
     "eu-ted:sync": "npm run scheduled:sync"
   },
   "private": true

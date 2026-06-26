@@ -31,6 +31,7 @@ type Filter =
   | 'launches'
   | 'competitions'
   | 'feeds'
+  | 'community'
   | 'grants'
   | 'tenders';
 
@@ -41,6 +42,7 @@ const filters: { id: Filter; label: string }[] = [
   { id: 'launches', label: 'Launches' },
   { id: 'competitions', label: 'Competitions' },
   { id: 'feeds', label: 'Feeds' },
+  { id: 'community', label: 'Community' },
   { id: 'grants', label: 'Grants' },
   { id: 'tenders', label: 'Tenders' },
 ];
@@ -84,6 +86,7 @@ export default function App() {
         (filter === 'launches' && opportunity.source === 'producthunt') ||
         (filter === 'competitions' && opportunity.source === 'kaggle') ||
         (filter === 'feeds' && opportunity.source === 'rss') ||
+        (filter === 'community' && opportunity.source === 'reddit') ||
         (filter === 'grants' &&
           (opportunity.source === 'grants' || opportunity.source === 'eufunding')) ||
         (filter === 'freetoplay' && opportunity.source === 'freetogame') ||

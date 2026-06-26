@@ -7,6 +7,7 @@ export type OpportunitySource =
   | 'producthunt'
   | 'kaggle'
   | 'rss'
+  | 'reddit'
   | 'eufunding'
   | 'ted'
   | 'grants';
