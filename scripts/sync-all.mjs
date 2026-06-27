@@ -136,11 +136,17 @@ const runProvider = (provider) =>
         imported: Number(payload?.imported ?? 0),
         skipped: payload?.skipped ? String(payload.skipped) : '',
         deduplicated: Number(payload?.deduplicated ?? 0),
+        providerError: payload?.error ? String(payload.error) : '',
+        attempts: Number(payload?.attempts ?? 1),
         error: timedOut
           ? `Timed out after ${timeoutMs}ms`
           : code === 0
             ? ''
-            : redact(stderr.trim() || stdout.trim() || `Exited with code ${code}`),
+            : redact(
+                payload?.error
+                  ? `${payload.code ? `${payload.code}: ` : ''}${payload.error}`
+                  : stderr.trim() || stdout.trim() || `Exited with code ${code}`,
+              ),
       });
     });
   });
@@ -177,9 +183,10 @@ const markdown = [
     const status = row.ok ? '✅ OK' : row.optional ? '⚠️ Skipped/failed' : '❌ Failed';
     const notes = (row.skipped || row.error || '').replace(/\s+/g, ' ').slice(0, 180);
     const dedupeNote = row.deduplicated ? `Deduplicated ${row.deduplicated}. ` : '';
+    const retryNote = row.attempts > 1 ? `Attempts ${row.attempts}. ` : '';
     return `| ${row.label} | ${status} | ${row.imported} | ${Math.round(
       row.durationMs / 1000,
-    )}s | ${dedupeNote}${notes} |`;
+    )}s | ${dedupeNote}${retryNote}${notes} |`;
   }),
   '',
   `Successes: ${successes.length}/${summaryRows.length}`,

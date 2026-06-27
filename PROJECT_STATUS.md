@@ -218,6 +218,9 @@ npm run functions:deploy
   ανά provider
 - Το resilient summary περιλαμβάνει πλέον και τις Edge Function πηγές:
   GamerPower, Epic Games, FreeToGame, CheapShark και Grants.gov
+- Οι Edge Function providers έχουν retry wrapper και καθαρό JSON error output,
+  ώστε transient Supabase invocation failures να ξαναδοκιμάζονται και να
+  εμφανίζουν χρήσιμη αιτία στο summary
 - Στο default resilient mode το workflow αποτυγχάνει μόνο αν αποτύχουν όλοι οι
   providers
 - Τα logs κάνουν redaction σε γνωστά secrets και bearer/basic tokens
