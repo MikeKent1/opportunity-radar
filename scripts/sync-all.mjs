@@ -16,6 +16,36 @@ const localEnv = fs.existsSync('.env')
 const mergedEnv = { ...localEnv, ...process.env };
 
 const providers = [
+  {
+    id: 'gamerpower',
+    label: 'GamerPower',
+    script: 'scripts/sync-edge-provider.mjs',
+    args: ['gamerpower'],
+  },
+  {
+    id: 'epicgames',
+    label: 'Epic Games',
+    script: 'scripts/sync-edge-provider.mjs',
+    args: ['epicgames'],
+  },
+  {
+    id: 'freetogame',
+    label: 'FreeToGame',
+    script: 'scripts/sync-edge-provider.mjs',
+    args: ['freetogame'],
+  },
+  {
+    id: 'cheapshark',
+    label: 'CheapShark',
+    script: 'scripts/sync-edge-provider.mjs',
+    args: ['cheapshark'],
+  },
+  {
+    id: 'grants',
+    label: 'Grants.gov',
+    script: 'scripts/sync-edge-provider.mjs',
+    args: ['grants'],
+  },
   { id: 'eufunding', label: 'EU Funding', script: 'scripts/sync-eu-funding.mjs' },
   { id: 'ted', label: 'TED', script: 'scripts/sync-ted.mjs' },
   { id: 'producthunt', label: 'Product Hunt', script: 'scripts/sync-product-hunt.mjs' },
@@ -58,7 +88,7 @@ const redact = (value) => {
 const runProvider = (provider) =>
   new Promise((resolve) => {
     const started = Date.now();
-    const child = spawn(process.execPath, [provider.script], {
+    const child = spawn(process.execPath, [provider.script, ...(provider.args ?? [])], {
       env: mergedEnv,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -105,6 +135,7 @@ const runProvider = (provider) =>
         stderr: redact(stderr),
         imported: Number(payload?.imported ?? 0),
         skipped: payload?.skipped ? String(payload.skipped) : '',
+        deduplicated: Number(payload?.deduplicated ?? 0),
         error: timedOut
           ? `Timed out after ${timeoutMs}ms`
           : code === 0
@@ -145,9 +176,10 @@ const markdown = [
   ...summaryRows.map((row) => {
     const status = row.ok ? '✅ OK' : row.optional ? '⚠️ Skipped/failed' : '❌ Failed';
     const notes = (row.skipped || row.error || '').replace(/\s+/g, ' ').slice(0, 180);
+    const dedupeNote = row.deduplicated ? `Deduplicated ${row.deduplicated}. ` : '';
     return `| ${row.label} | ${status} | ${row.imported} | ${Math.round(
       row.durationMs / 1000,
-    )}s | ${notes} |`;
+    )}s | ${dedupeNote}${notes} |`;
   }),
   '',
   `Successes: ${successes.length}/${summaryRows.length}`,

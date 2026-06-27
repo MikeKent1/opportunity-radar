@@ -216,6 +216,8 @@ npm run functions:deploy
   εκτελεί κάθε provider ξεχωριστά
 - Το GitHub Actions summary δείχνει status, imported count, duration και notes
   ανά provider
+- Το resilient summary περιλαμβάνει πλέον και τις Edge Function πηγές:
+  GamerPower, Epic Games, FreeToGame, CheapShark και Grants.gov
 - Στο default resilient mode το workflow αποτυγχάνει μόνο αν αποτύχουν όλοι οι
   providers
 - Τα logs κάνουν redaction σε γνωστά secrets και bearer/basic tokens

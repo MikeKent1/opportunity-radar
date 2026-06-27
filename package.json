@@ -30,6 +30,7 @@
     "db:check": "supabase db push --linked --dry-run",
     "db:push": "supabase db push --linked",
     "functions:deploy": "supabase functions deploy sync-opportunities --project-ref oqtqngqrelmszofoknqr",
+    "edge:sync": "node scripts/sync-edge-provider.mjs",
     "eu:sync": "node scripts/sync-eu-funding.mjs",
     "ted:sync": "node scripts/sync-ted.mjs",
     "producthunt:sync": "node scripts/sync-product-hunt.mjs",
