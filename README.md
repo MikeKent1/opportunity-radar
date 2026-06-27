@@ -203,3 +203,21 @@ npm start
 ```
 
 Σκάναρε το QR με Expo Go ή τρέξε `npm run android` / `npm run web`.
+
+## 6. Android development build
+
+Αν το Expo Go δεν είναι συμβατό με το SDK του project, χρησιμοποίησε custom
+development build:
+
+```bash
+npx eas-cli login
+npx eas-cli build --platform android --profile development
+```
+
+Μετά την εγκατάσταση του APK στο κινητό, τρέξε:
+
+```bash
+npm run start:dev
+```
+
+και άνοιξε το project μέσα από την εγκατεστημένη εφαρμογή Opportunity Radar Dev.

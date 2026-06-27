@@ -6,6 +6,7 @@
     "@react-native-async-storage/async-storage": "2.2.0",
     "@supabase/supabase-js": "^2.108.2",
     "expo": "~56.0.12",
+    "expo-dev-client": "~56.0.20",
     "expo-linear-gradient": "~56.0.4",
     "expo-status-bar": "~56.0.4",
     "fast-xml-parser": "^5.9.3",
@@ -22,6 +23,7 @@
   },
   "scripts": {
     "start": "expo start",
+    "start:dev": "expo start --dev-client",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
