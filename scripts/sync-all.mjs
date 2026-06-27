@@ -9,7 +9,7 @@ const localEnv = fs.existsSync('.env')
         .filter((line) => line && !line.startsWith('#') && line.includes('='))
         .map((line) => {
           const index = line.indexOf('=');
-          return [line.slice(0, index), line.slice(index + 1)];
+          return [line.slice(0, index).replace(/^\uFEFF/, ''), line.slice(index + 1)];
         }),
     )
   : {};
@@ -52,6 +52,17 @@ const providers = [
   { id: 'kaggle', label: 'Kaggle', script: 'scripts/sync-kaggle.mjs' },
   { id: 'rss', label: 'RSS feeds', script: 'scripts/sync-rss-feeds.mjs' },
   { id: 'reddit', label: 'Reddit', script: 'scripts/sync-reddit.mjs', optional: true },
+  {
+    id: 'apify-instagram',
+    label: 'Apify Instagram',
+    script: 'scripts/sync-apify-instagram.mjs',
+    optional: true,
+  },
+  {
+    id: 'reward-categorization',
+    label: 'Reward categorization',
+    script: 'scripts/backfill-giveaway-rewards.mjs',
+  },
 ];
 
 const timeoutMs = Number(process.env.SYNC_PROVIDER_TIMEOUT_MS ?? 180_000);
@@ -70,6 +81,8 @@ const sensitiveValues = [
   'KAGGLE_API_TOKEN',
   'REDDIT_CLIENT_ID',
   'REDDIT_CLIENT_SECRET',
+  'APIFY_TOKEN',
+  'INSTAGRAM_ACTOR_ID',
 ]
   .map((key) => mergedEnv[key])
   .filter(Boolean);

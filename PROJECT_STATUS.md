@@ -1,4 +1,4 @@
-# Opportunity Radar — Κατάσταση Project
+# Prizen — Κατάσταση Project
 
 Τελευταία ενημέρωση: 26 Ιουνίου 2026
 
@@ -259,3 +259,83 @@ npm run functions:deploy
 - Authentication και αποθηκευμένα αγαπημένα
 - Ειδοποιήσεις για giveaways που λήγουν
 - Βελτίωση branding, navigation και λεπτομερούς οθόνης
+
+## Apify Instagram social monitoring
+
+- Prosthiki migration `20260627143000_add_apify_social_monitoring.sql`
+- Dimiourgountai `social_sources` kai `social_posts`
+- To `opportunities` pairnei optional social fields: `source_type`, `category`, `subcategory`, `participation_steps`, `expires_at`, `participation_url`
+- Arxika seed sources: mrbeast, playstation, razer, corsair, xbox, nintendoamerica, logitechg, steelseries
+- Prosthiki script `npm run sync:apify`
+- To script diavazei enabled Instagram sources, trexei ton Apify Instagram actor, apothikevei posts kai kanei duplicate-safe opportunity import
+- O detector einai rule-based, oxi OpenAI: psaxnei giveaway keywords kai vgazei subcategory `game`, `cash`, `trip`, `gift_card`, `hardware` i `other`
+- To scheduled resilient sync perilamvanei pleon optional provider `Apify Instagram`
+- To proto successful Apify sync apothikeuse 15 Instagram posts kai dimiourgise 2 social giveaway opportunities apo `logitechg` kai `corsair`
+
+## Reward-based giveaway categorization
+
+- Prosthiki shared classifier `scripts/lib/reward-classifier.mjs`
+- Prosthiki backfill command `npm run rewards:backfill`
+- Ta giveaways xwrizontai pleon me vasi to reward: `game`, `dlc`, `in_game_item`, `gift_card`, `hardware`, `cash`, `trip`, `software`, `other`
+- To UI deixnei deuteri seira filters mesa sto `Giveaways`: All, Games, DLC, In-game, Gift cards, Hardware, Cash, Trips, Software, Other
+- To Apify Instagram sync xrisimopoiei ton idio reward classifier
+- To scheduled resilient sync trexei sto telos `Reward categorization`
+- To backfill efarmostike se 94 active giveaways: 17 games, 29 DLC, 44 in-game items, 2 hardware, 2 software
+
+## Main screen compact header
+
+- Afairesi tou megalou hero panel apo tin arxiki othoni.
+- Ta stats emfanizontai pleon se mikro compact row kato apo to top bar: active opportunities kai funding count.
+- To search, ta filters kai to feed anevikan psilotera, wste na fainontai perissoteres eukairies amesa.
+- To app name sto top bar einai pleon kentrarismeno orizontia, me kalutero top spacing gia Android status bar.
+- Afairesi tou diakosmitikou `OR` button kai tou manual sync button apo to main header.
+- To app den kanei pleon provider sync sto app startup. To pull-to-refresh fortonei ksana mono ta idi yparxonta Supabase dedomena.
+
+## Feed interaction performance
+
+- Ta main tabs kai ta giveaway reward tabs enimeronoun pleon to active state amesa, enw to feed filtering mporei na ginei deferred.
+- Prosthiki prepared search/filter metadata gia na min ypologizetai ksana haystack kai giveaway status se kathe tab press.
+- To funding count ypologizetai me memoized value.
+- To `OpportunityCard` egine memoized component gia ligotera unnecessary rerenders otan allazoun filters/tabs.
+- To `FlatList` renderarei mikrotera batches gia na min mplokarei to tab press se megalo feed.
+
+## App naming
+
+- To app metonomastike se `Prizen` sto main header kai sto Expo app config.
+- Enimerothikan oi vasikes project epikefalides se `README.md` kai `PROJECT_STATUS.md`.
+
+## Cash giveaway classification
+
+- Veltiosi tou `scripts/lib/reward-classifier.mjs` gia cash-focused reward detection.
+- To `cash` pianei pleon money amounts (`$500`, `1000 EUR`) kai orous opos prize money, prize pool, bounty, stipend, scholarship, microgrant, payout, wire transfer, cash reward.
+- To `gift_card` paramenei pio psila apo `cash`, wste `Steam gift card` i `Amazon card` na min mpei lathos sto Cash.
+- Etrexe `npm run rewards:backfill`: elegxthikan 94 active giveaways, alla den vrethikan pragmatika cash rewards sta yparxonta dedomena.
+- To `Giveaways > Cash` paramenei adeio mexri na prostethoun cash-focused sources i na erthei neo cash giveaway apo RSS/Reddit/social sync.
+
+## Instagram source expansion
+
+- Prosthiki migration `20260627164500_expand_instagram_social_sources.sql`.
+- Prostithentai 22 nea curated Instagram sources se batches: hardware, gaming publishers/platforms kai mikra cash/sweepstakes candidates.
+- Nea accounts: alienware, asusrog, msigaming, nzxt, hyperx, elgato, secretlab, scufgaming, turtlebeach, astrogaming, bethesda, ubisoft, ea, riotgames, blizzard, 2k, bandainamcous, devolverdigital, cashapp, venmo, pch, jackpocket.
+- Prosthiki view `social_source_performance` gia metrisi ana account: posts_saved, giveaway_posts, imported_opportunities kai latest_posted_at.
+- To `scripts/sync-apify-instagram.mjs` grafei pleon `sourceStats` sto JSON summary gia na vlepoume poia Instagram accounts apodidoun.
+- `npm run db:check` perase kai deixnei oti i migration einai etoimi gia push.
+- Prosthiki migration `20260627180000_expand_instagram_hardware_sources.sql` kai efarmostike sti remote vasi.
+- Prostethikan 15 akoma Instagram sources: nvidiageforce, amd, intelgaming, coolermaster, gskillgaming, thermaltakeusa, zotacgaming, aorus_official, gigabyte_official, originpc, maingear, cyberpowerpc, ibuypowerpc, drop, streamlabs.
+- Ta Instagram sources einai pleon 45 enabled: 24 hardware, 8 gaming, 8 giveaways, 4 cash_candidate, 1 creator_tools.
+
+## Low-cost Apify Instagram actor
+
+- To `scripts/sync-apify-instagram.mjs` ypostirizei pleon kai ton actor `sones/instagram-posts-scraper-lowcost`.
+- Prosthiki `INSTAGRAM_ACTOR_MODE=lowcost` kai auto-detect otan to `INSTAGRAM_ACTOR_ID` periexei `instagram-posts-scraper-lowcost`.
+- Gia lowcost mode to input stelnei `usernames`, `postsPerProfile`, residential proxy config kai rate-limit settings.
+- O parser ypστηrizei lowcost output fields: `caption.text`, `post_url`, `scraped_username`, `user.username`, `image_versions2`, `carousel_media`.
+- Prosthiki `INSTAGRAM_SOURCE_USERNAMES` gia mikro dokimastiko sync se epilegmena accounts.
+- To GitHub scheduled workflow pernάei pleon optional `INSTAGRAM_ACTOR_MODE` kai `INSTAGRAM_SOURCE_USERNAMES` secrets.
+- Dokimi me `sones/instagram-posts-scraper-lowcost` se `logitechg,corsair` petyxe: actorMode `lowcost`, 24 postsSaved, 6 giveaway detections/opportunities sto script summary.
+- To local `.env` gyrise sto low-cost actor xwris na emfanistoun secrets.
+- To GitHub scheduled sync xrisimopoiei pleon stathera `sones/instagram-posts-scraper-lowcost` kai `INSTAGRAM_ACTOR_MODE=lowcost`, anti na eksartatai apo `INSTAGRAM_ACTOR_ID` secret.
+- Sto lowcost mode to sync stelnei pleon `newerThan` me vasi to pio prosfato `social_posts.posted_at` ana account, me default 30 lepta lookback.
+- To `INSTAGRAM_NEWER_THAN_LOOKBACK_MINUTES` mporei na rythmisei to safety window gia na min xathoun posts se timezone/pagination edge cases.
+- Diorthothike local `.env` BOM issue pou ekane to sync na min vriskei `EXPO_PUBLIC_SUPABASE_URL` kai na kanei skip prin ftasei sto Apify.
+- To lowcost `newerThan` grouping den trexei pleon ena Apify run ana account. Kanei mexri 2 runs: ena gia nea accounts xwris istoriko kai ena gia accounts me yparxonta posts.

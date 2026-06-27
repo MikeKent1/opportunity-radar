@@ -1,4 +1,5 @@
 import { LinearGradient } from 'expo-linear-gradient';
+import { memo } from 'react';
 import { Image, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Opportunity } from '../types';
@@ -25,7 +26,7 @@ function formatAmount(amount: number | null, currency: string) {
   }).format(amount);
 }
 
-export function OpportunityCard({ opportunity }: { opportunity: Opportunity }) {
+function OpportunityCardComponent({ opportunity }: { opportunity: Opportunity }) {
   const amount = formatAmount(opportunity.amount, opportunity.currency);
   const isGrant =
     opportunity.source === 'grants' || opportunity.source === 'eufunding';
@@ -33,8 +34,11 @@ export function OpportunityCard({ opportunity }: { opportunity: Opportunity }) {
   const isCompetition = opportunity.source === 'kaggle';
   const isFeed = opportunity.source === 'rss';
   const isCommunity = opportunity.source === 'reddit';
+  const isSocial = opportunity.source_type === 'social';
   const sourceLabel =
-    opportunity.source === 'gamerpower'
+    isSocial
+      ? `INSTAGRAM @${opportunity.source}`.toUpperCase()
+      : opportunity.source === 'gamerpower'
       ? 'GAMERPOWER'
       : opportunity.source === 'epicgames'
         ? 'EPIC GAMES'
@@ -76,6 +80,8 @@ export function OpportunityCard({ opportunity }: { opportunity: Opportunity }) {
                   ? ['#1D1C2E', '#101419']
                   : isCommunity
                     ? ['#2A1B17', '#111817']
+                    : isSocial
+                      ? ['#26172B', '#111817']
               : ['#201F18', '#111817']
         }
         style={styles.cardGradient}
@@ -96,6 +102,7 @@ export function OpportunityCard({ opportunity }: { opportunity: Opportunity }) {
               isCompetition && styles.competitionBadge,
               isFeed && styles.feedBadge,
               isCommunity && styles.communityBadge,
+              isSocial && styles.socialBadge,
             ]}
           >
             <Text
@@ -111,6 +118,8 @@ export function OpportunityCard({ opportunity }: { opportunity: Opportunity }) {
                         ? styles.feedText
                         : isCommunity
                           ? styles.communityText
+                          : isSocial
+                            ? styles.socialText
                       : styles.giveawayText,
               ]}
             >
@@ -174,6 +183,8 @@ export function OpportunityCard({ opportunity }: { opportunity: Opportunity }) {
   );
 }
 
+export const OpportunityCard = memo(OpportunityCardComponent);
+
 const styles = StyleSheet.create({
   card: {
     borderRadius: 22,
@@ -198,6 +209,7 @@ const styles = StyleSheet.create({
   competitionBadge: { backgroundColor: '#1C2D51' },
   feedBadge: { backgroundColor: '#2C2757' },
   communityBadge: { backgroundColor: '#4A251B' },
+  socialBadge: { backgroundColor: '#4A1F55' },
   sourceText: { fontSize: 9, fontWeight: '900', letterSpacing: 1 },
   grantText: { color: '#7DE0CF' },
   giveawayText: { color: '#D9FF57' },
@@ -205,6 +217,7 @@ const styles = StyleSheet.create({
   competitionText: { color: '#76B7FF' },
   feedText: { color: '#B9A7FF' },
   communityText: { color: '#FF8A63' },
+  socialText: { color: '#F0A7FF' },
   deadline: { color: '#849395', fontSize: 11, fontWeight: '600' },
   organization: { color: '#7DA19D', fontSize: 11, marginTop: 18, fontWeight: '700' },
   title: {

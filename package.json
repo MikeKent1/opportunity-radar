@@ -39,6 +39,8 @@
     "kaggle:sync": "node scripts/sync-kaggle.mjs",
     "rss:sync": "node scripts/sync-rss-feeds.mjs",
     "reddit:sync": "node scripts/sync-reddit.mjs",
+    "sync:apify": "node scripts/sync-apify-instagram.mjs",
+    "rewards:backfill": "node scripts/backfill-giveaway-rewards.mjs",
     "scheduled:sync": "node scripts/sync-all.mjs",
     "scheduled:sync:strict": "node scripts/sync-all.mjs --strict",
     "eu-ted:sync": "npm run scheduled:sync"

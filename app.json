@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Opportunity Radar",
-    "slug": "opportunity-radar",
+    "name": "Prizen",
+    "slug": "prizen",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -24,6 +24,11 @@
     },
     "plugins": [
       "expo-dev-client"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "79828135-53a9-4c1f-b32f-d528eb4b5a02"
+      }
+    }
   }
 }

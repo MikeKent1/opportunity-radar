@@ -1,4 +1,4 @@
-# Opportunity Radar
+# Prizen
 
 React Native / Expo εφαρμογή που συγκεντρώνει giveaways και grants σε ένα feed.
 
@@ -220,4 +220,102 @@ npx eas-cli build --platform android --profile development
 npm run start:dev
 ```
 
-και άνοιξε το project μέσα από την εγκατεστημένη εφαρμογή Opportunity Radar Dev.
+και άνοιξε το project μέσα από την εγκατεστημένη εφαρμογή Prizen Dev.
+
+## 7. Apify Instagram social monitoring
+
+To MVP einai etoimo gia Instagram giveaways mono mesa apo Apify. Den kanoume direct scraping apo to app.
+
+Topika sto `.env` i sta GitHub Secrets vale:
+
+```bash
+APIFY_TOKEN=YOUR_APIFY_TOKEN
+INSTAGRAM_ACTOR_ID=sones/instagram-posts-scraper-lowcost
+INSTAGRAM_ACTOR_MODE=lowcost
+INSTAGRAM_POSTS_LIMIT=10
+INSTAGRAM_NEWER_THAN_LOOKBACK_MINUTES=30
+```
+
+Gia local/manual sync:
+
+```bash
+npm run sync:apify
+```
+
+Gia dokimastiko run se liga accounts:
+
+```bash
+INSTAGRAM_SOURCE_USERNAMES=logitechg,corsair npm run sync:apify
+```
+
+Gia na perasei sto Supabase schema:
+
+```bash
+npm run db:check
+npm run db:push
+```
+
+Ti ftiaxnei i migration:
+
+- `social_sources`: Instagram accounts pou parakolouthoume
+- `social_posts`: ta posts pou fernei o Apify actor
+- extra social fields sto `opportunities`, opos `source_type`, `category`, `subcategory`, `participation_steps`, `participation_url`
+
+Arxika seed Instagram sources:
+
+- `mrbeast`
+- `playstation`
+- `razer`
+- `corsair`
+- `xbox`
+- `nintendoamerica`
+- `logitechg`
+- `steelseries`
+
+Gia na prostheseis neo Instagram source:
+
+```sql
+insert into public.social_sources (platform, username, display_name, category, enabled)
+values ('instagram', 'username_here', 'Display Name', 'giveaways', true)
+on conflict (platform, username) do update
+set enabled = true, display_name = excluded.display_name;
+```
+
+O rule-based detector psaxnei sto caption lekseis opos:
+
+```txt
+giveaway, win, winner, prize, enter, follow, comment, tag, share, contest, sweepstakes
+```
+
+An to post moiazei me giveaway, dimiourgei opportunity me:
+
+- `source_type = social`
+- `source = Instagram username`
+- `category = giveaways`
+- `subcategory = game | cash | trip | gift_card | hardware | other`
+
+Argotera, gia AI parser, tha prosthesoume OpenAI-based classifier/extractor pou tha vriskei pio kathara prizes, dates, participation steps kai risk/spam score.
+
+## 8. Giveaway reward categories
+
+Ta giveaways den xwrizontai pleon kyriws me vasi tin pigi, alla me vasi to reward:
+
+- `game`
+- `dlc`
+- `in_game_item`
+- `gift_card`
+- `hardware`
+- `cash`
+- `trip`
+- `software`
+- `other`
+
+I pigi paramenei sto `source`, px `gamerpower`, `epicgames`, `logitechg`, enw to `subcategory` deixnei ti kerdizeis.
+
+Gia na kaneis backfill/refresh sta yparxonta active giveaways:
+
+```bash
+npm run rewards:backfill
+```
+
+To `npm run scheduled:sync` trexei pleon kai reward categorization sto telos, wste ta nea imports na pairnoun swsto `subcategory`.
