@@ -339,3 +339,10 @@ npm run functions:deploy
 - To `INSTAGRAM_NEWER_THAN_LOOKBACK_MINUTES` mporei na rythmisei to safety window gia na min xathoun posts se timezone/pagination edge cases.
 - Diorthothike local `.env` BOM issue pou ekane to sync na min vriskei `EXPO_PUBLIC_SUPABASE_URL` kai na kanei skip prin ftasei sto Apify.
 - To lowcost `newerThan` grouping den trexei pleon ena Apify run ana account. Kanei mexri 2 runs: ena gia nea accounts xwris istoriko kai ena gia accounts me yparxonta posts.
+
+## Instagram sync rotation
+
+- Prosthiki `INSTAGRAM_ROTATION_BUCKETS` sto `scripts/sync-apify-instagram.mjs`.
+- To GitHub scheduled sync exei pleon `INSTAGRAM_ROTATION_BUCKETS=2`, ara trexei peripou ta misa enabled Instagram accounts ana mera kai ola ta accounts se kyklo 2 imerwn.
+- To rotation einai deterministic ana username kai imerominia, enw to `INSTAGRAM_SOURCE_USERNAMES` kanei bypass to rotation gia manual targeted tests.
+- To Apify Instagram JSON summary kai to GitHub scheduled summary emfanizoun pleon note me rotation bucket kai posa sources epilexthikan.

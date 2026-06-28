@@ -33,6 +33,7 @@ jobs:
       INSTAGRAM_ACTOR_ID: sones/instagram-posts-scraper-lowcost
       INSTAGRAM_ACTOR_MODE: lowcost
       INSTAGRAM_POSTS_LIMIT: ${{ secrets.INSTAGRAM_POSTS_LIMIT }}
+      INSTAGRAM_ROTATION_BUCKETS: 2
       INSTAGRAM_SOURCE_USERNAMES: ${{ secrets.INSTAGRAM_SOURCE_USERNAMES }}
       SUPABASE_PROJECT_REF: oqtqngqrelmszofoknqr
 

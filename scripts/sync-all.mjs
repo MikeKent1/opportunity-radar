@@ -148,6 +148,7 @@ const runProvider = (provider) =>
         stderr: redact(stderr),
         imported: Number(payload?.imported ?? 0),
         skipped: payload?.skipped ? String(payload.skipped) : '',
+        note: payload?.note ? String(payload.note) : '',
         deduplicated: Number(payload?.deduplicated ?? 0),
         providerError: payload?.error ? String(payload.error) : '',
         attempts: Number(payload?.attempts ?? 1),
@@ -194,7 +195,7 @@ const markdown = [
   '| --- | --- | ---: | ---: | --- |',
   ...summaryRows.map((row) => {
     const status = row.ok ? '✅ OK' : row.optional ? '⚠️ Skipped/failed' : '❌ Failed';
-    const notes = (row.skipped || row.error || '').replace(/\s+/g, ' ').slice(0, 180);
+    const notes = (row.skipped || row.error || row.note || '').replace(/\s+/g, ' ').slice(0, 180);
     const dedupeNote = row.deduplicated ? `Deduplicated ${row.deduplicated}. ` : '';
     const retryNote = row.attempts > 1 ? `Attempts ${row.attempts}. ` : '';
     return `| ${row.label} | ${status} | ${row.imported} | ${Math.round(

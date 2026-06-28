@@ -36,6 +36,8 @@ const sourceUsernames = new Set(
 );
 const postsLimit = Number(setting('INSTAGRAM_POSTS_LIMIT') ?? 10);
 const apifyTimeoutMs = Number(setting('APIFY_TIMEOUT_MS') ?? 180_000);
+const rotationBuckets = Math.max(1, Number(setting('INSTAGRAM_ROTATION_BUCKETS') ?? 1));
+const rotationBucketOverride = setting('INSTAGRAM_ROTATION_BUCKET');
 
 const finish = (payload) => {
   console.log(JSON.stringify({ providers: ['apify-instagram'], ...payload }));
@@ -74,6 +76,7 @@ const giveawayKeywords = [
 ];
 
 const hash = (value) => crypto.createHash('sha1').update(value).digest('hex').slice(0, 16);
+const hashNumber = (value) => Number.parseInt(hash(value).slice(0, 8), 16);
 
 function normalizeActorId(actorId) {
   return actorId.includes('/') ? actorId.replace('/', '~') : actorId;
@@ -84,6 +87,20 @@ function isLowcostActor(actorId) {
     instagramActorMode === 'lowcost' ||
     lower(actorId).includes('instagram-posts-scraper-lowcost')
   );
+}
+
+function getCurrentRotationBucket() {
+  if (rotationBucketOverride) {
+    const parsed = Number(rotationBucketOverride);
+    if (Number.isFinite(parsed)) return Math.max(0, Math.floor(parsed)) % rotationBuckets;
+  }
+
+  return Math.floor(Date.now() / 86_400_000) % rotationBuckets;
+}
+
+function sourceMatchesRotation(source, currentBucket) {
+  if (sourceUsernames.size > 0 || rotationBuckets <= 1) return true;
+  return hashNumber(source.username) % rotationBuckets === currentBucket;
 }
 
 function getCaption(item) {
@@ -336,8 +353,11 @@ let postsSaved = 0;
 const errors = [];
 
 try {
+  const currentRotationBucket = getCurrentRotationBucket();
   const enabledSources = (sources ?? []).filter(
-    (source) => sourceUsernames.size === 0 || sourceUsernames.has(source.username.toLowerCase()),
+    (source) =>
+      (sourceUsernames.size === 0 || sourceUsernames.has(source.username.toLowerCase())) &&
+      sourceMatchesRotation(source, currentRotationBucket),
   );
   const sourceByUsername = new Map(enabledSources.map((source) => [source.username.toLowerCase(), source]));
   const sourceStats = Object.fromEntries(
@@ -480,6 +500,17 @@ try {
     deduplicated: 0,
     actorMode: isLowcostActor(instagramActorId) ? 'lowcost' : 'legacy',
     actorId: instagramActorId,
+    rotation: {
+      buckets: rotationBuckets,
+      bucket: currentRotationBucket,
+      selectedSources: enabledSources.length,
+      totalSources: sources?.length ?? 0,
+      bypassed: sourceUsernames.size > 0,
+    },
+    note:
+      rotationBuckets > 1 && sourceUsernames.size === 0
+        ? `Rotation bucket ${currentRotationBucket + 1}/${rotationBuckets}, selected ${enabledSources.length}/${sources?.length ?? 0} sources`
+        : '',
     sourceStats,
     errors,
     skipped: errors.length
@@ -499,6 +530,13 @@ finish({
   deduplicated: 0,
   actorMode: isLowcostActor(instagramActorId) ? 'lowcost' : 'legacy',
   actorId: instagramActorId,
+  rotation: {
+    buckets: rotationBuckets,
+    bucket: getCurrentRotationBucket(),
+    selectedSources: 0,
+    totalSources: sources?.length ?? 0,
+    bypassed: sourceUsernames.size > 0,
+  },
   errors,
   skipped: errors.length
     ? `Errors: ${errors.slice(0, 3).join(' | ')}`
