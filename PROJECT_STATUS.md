@@ -343,6 +343,6 @@ npm run functions:deploy
 ## Instagram sync rotation
 
 - Prosthiki `INSTAGRAM_ROTATION_BUCKETS` sto `scripts/sync-apify-instagram.mjs`.
-- To GitHub scheduled sync exei pleon `INSTAGRAM_ROTATION_BUCKETS=2`, ara trexei peripou ta misa enabled Instagram accounts ana mera kai ola ta accounts se kyklo 2 imerwn.
+- To GitHub scheduled sync exei pleon `INSTAGRAM_ROTATION_BUCKETS=4`, ara trexei peripou to 1/4 twn enabled Instagram accounts ana mera kai ola ta accounts se kyklo 4 imerwn.
 - To rotation einai deterministic ana username kai imerominia, enw to `INSTAGRAM_SOURCE_USERNAMES` kanei bypass to rotation gia manual targeted tests.
 - To Apify Instagram JSON summary kai to GitHub scheduled summary emfanizoun pleon note me rotation bucket kai posa sources epilexthikan.
