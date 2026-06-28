@@ -348,3 +348,12 @@ npm run functions:deploy
 - To Apify Instagram JSON summary kai to GitHub scheduled summary emfanizoun pleon note me rotation bucket kai posa sources epilexthikan.
 - To low-cost actor xrisimopoiei pleon fixed `INSTAGRAM_NEWER_THAN_DAYS=5` sto scheduled workflow, anti na pairnei koino cutoff apo palia account timestamps.
 - To per-account latest-post fallback paramenei mono an `INSTAGRAM_NEWER_THAN_DAYS=0`.
+
+## Google auth foundation
+
+- Prosthiki Expo/Supabase Google OAuth foundation me `expo-auth-session` kai `expo-web-browser`.
+- Prosthiki `scheme: prizen` sto `app.json` gia native auth callback `prizen://auth/callback`.
+- Prosthiki `src/services/auth.ts` me `signInWithGoogle` kai `signOut`.
+- To main screen deixnei compact account panel: Google sign-in, signed-in email, sign-out.
+- Prosthiki migration `20260628100000_add_saved_opportunities.sql` me `saved_opportunities`, RLS policies kai per-user access.
+- Fasi 1 einai login/logout + schema. Save/unsave buttons kai `Saved` tab paramenoun gia Fasi 2.

@@ -3,6 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Linking,
   Platform,
@@ -16,8 +17,11 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { Session } from '@supabase/supabase-js';
 
 import { OpportunityCard } from './src/components/OpportunityCard';
+import { isSupabaseConfigured, supabase } from './src/lib/supabase';
+import { signInWithGoogle, signOut } from './src/services/auth';
 import { Opportunity, OpportunitySource } from './src/types';
 import {
   loadOpportunities,
@@ -97,6 +101,8 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [authLoading, setAuthLoading] = useState(false);
 
   const fetchOpportunities = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -113,6 +119,42 @@ export default function App() {
     const unsubscribe = subscribeToOpportunities(() => fetchOpportunities(true));
     return unsubscribe;
   }, [fetchOpportunities]);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+
+    void supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleGoogleSignIn = async () => {
+    setAuthLoading(true);
+    const result = await signInWithGoogle();
+    setAuthLoading(false);
+
+    if (!result.ok && result.message !== 'Sign in was cancelled.') {
+      Alert.alert('Sign in failed', result.message);
+    }
+  };
+
+  const handleSignOut = async () => {
+    setAuthLoading(true);
+    const result = await signOut();
+    setAuthLoading(false);
+
+    if (!result.ok) {
+      Alert.alert('Sign out failed', result.message);
+    }
+  };
 
   const preparedOpportunities = useMemo<PreparedOpportunity[]>(
     () =>
@@ -212,6 +254,35 @@ export default function App() {
                   </Text>
                   <Text style={styles.statLabel}>χρηματοδοτήσεις</Text>
                 </View>
+              </View>
+
+              <View style={styles.authPanel}>
+                <View style={styles.authCopy}>
+                  <Text style={styles.authLabel}>
+                    {session ? 'Account' : 'Save opportunities'}
+                  </Text>
+                  <Text numberOfLines={1} style={styles.authText}>
+                    {session?.user.email ?? 'Sign in to save favorites soon.'}
+                  </Text>
+                </View>
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={authLoading || !isSupabaseConfigured}
+                  onPress={session ? handleSignOut : handleGoogleSignIn}
+                  style={({ pressed }) => [
+                    styles.authButton,
+                    pressed && styles.authButtonPressed,
+                    (authLoading || !isSupabaseConfigured) && styles.authButtonDisabled,
+                  ]}
+                >
+                  {authLoading ? (
+                    <ActivityIndicator size="small" color="#071A1C" />
+                  ) : (
+                    <Text style={styles.authButtonText}>
+                      {session ? 'Sign out' : 'Google'}
+                    </Text>
+                  )}
+                </Pressable>
               </View>
 
               <View style={styles.searchBox}>
@@ -356,6 +427,32 @@ const styles = StyleSheet.create({
   },
   statValue: { color: '#D9FF57', fontSize: 17, fontWeight: '800' },
   statLabel: { color: '#8FB3AE', fontSize: 11, fontWeight: '700' },
+  authPanel: {
+    minHeight: 52,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#243436',
+    backgroundColor: '#0E1718',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 13,
+    paddingVertical: 9,
+  },
+  authCopy: { flex: 1, paddingRight: 10 },
+  authLabel: { color: '#7DE0CF', fontSize: 10, fontWeight: '900', letterSpacing: 1 },
+  authText: { color: '#DCE8E5', fontSize: 13, fontWeight: '700', marginTop: 4 },
+  authButton: {
+    minWidth: 84,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: '#D9FF57',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
+  authButtonPressed: { opacity: 0.75, transform: [{ scale: 0.98 }] },
+  authButtonDisabled: { opacity: 0.5 },
+  authButtonText: { color: '#071A1C', fontSize: 12, fontWeight: '900' },
   searchBox: {
     height: 54,
     marginTop: 18,

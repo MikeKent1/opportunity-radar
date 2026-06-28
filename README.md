@@ -321,3 +321,34 @@ npm run rewards:backfill
 ```
 
 To `npm run scheduled:sync` trexei pleon kai reward categorization sto telos, wste ta nea imports na pairnoun swsto `subcategory`.
+
+## 9. Google auth kai saved opportunities
+
+To app exei foundation gia Supabase Auth me Google OAuth.
+
+Sto Supabase Dashboard:
+
+1. Anoikse `Authentication` -> `Providers`.
+2. Energopoihse `Google`.
+3. Vale Google OAuth Client ID kai Client Secret apo Google Cloud Console.
+4. Sta redirect URLs prosthese:
+
+```txt
+prizen://auth/callback
+```
+
+Gia Expo web/local testing prosthese kai to redirect pou tha sou emfanisei to Expo dev server, an xreiastei.
+
+To schema gia ta saved opportunities einai sto migration:
+
+```txt
+supabase/migrations/20260628100000_add_saved_opportunities.sql
+```
+
+Efarmogi:
+
+```bash
+npm run db:push
+```
+
+I Fasi 1 prosthetei login/logout kai asfales table `saved_opportunities`. Ta actual save buttons kai `Saved` tab einai Fasi 2.
