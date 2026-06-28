@@ -38,6 +38,7 @@ const postsLimit = Number(setting('INSTAGRAM_POSTS_LIMIT') ?? 10);
 const apifyTimeoutMs = Number(setting('APIFY_TIMEOUT_MS') ?? 180_000);
 const rotationBuckets = Math.max(1, Number(setting('INSTAGRAM_ROTATION_BUCKETS') ?? 1));
 const rotationBucketOverride = setting('INSTAGRAM_ROTATION_BUCKET');
+const newerThanDays = Number(setting('INSTAGRAM_NEWER_THAN_DAYS') ?? 5);
 
 const finish = (payload) => {
   console.log(JSON.stringify({ providers: ['apify-instagram'], ...payload }));
@@ -273,6 +274,12 @@ function subtractMinutes(value, minutes) {
   return date.toISOString();
 }
 
+function daysAgo(days) {
+  const date = new Date();
+  date.setDate(date.getDate() - days);
+  return date.toISOString();
+}
+
 async function loadLatestPostedAtBySource(sources) {
   if (!isLowcostActor(instagramActorId) || sources.length === 0) return new Map();
 
@@ -301,6 +308,10 @@ async function loadLatestPostedAtBySource(sources) {
 async function fetchLatestPostsForSources(sources) {
   if (!isLowcostActor(instagramActorId)) {
     return fetchLatestPosts(sources);
+  }
+
+  if (newerThanDays > 0) {
+    return fetchLatestPosts(sources, { newerThan: daysAgo(newerThanDays) });
   }
 
   const latestBySource = await loadLatestPostedAtBySource(sources);
