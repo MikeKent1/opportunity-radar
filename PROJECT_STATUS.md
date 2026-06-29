@@ -357,3 +357,4 @@ npm run functions:deploy
 - To main screen deixnei compact account panel: Google sign-in, signed-in email, sign-out.
 - Prosthiki migration `20260628100000_add_saved_opportunities.sql` me `saved_opportunities`, RLS policies kai per-user access.
 - Fasi 1 einai login/logout + schema. Save/unsave buttons kai `Saved` tab paramenoun gia Fasi 2.
+- To Expo `name` paramenei `Prizen`, alla to EAS `slug` kratithike `opportunity-radar` giati to yparxon `extra.eas.projectId` einai syndedemeno me auto to project slug.
