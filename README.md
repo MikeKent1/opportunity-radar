@@ -351,4 +351,4 @@ Efarmogi:
 npm run db:push
 ```
 
-I Fasi 1 prosthetei login/logout kai asfales table `saved_opportunities`. Ta actual save buttons kai `Saved` tab einai Fasi 2.
+I Fasi 1 prosthetei login-gated app flow, Google login, Settings logout kai asfales table `saved_opportunities`. Ta actual save buttons kai `Saved` tab einai Fasi 2.

@@ -354,7 +354,8 @@ npm run functions:deploy
 - Prosthiki Expo/Supabase Google OAuth foundation me `expo-auth-session` kai `expo-web-browser`.
 - Prosthiki `scheme: prizen` sto `app.json` gia native auth callback `prizen://auth/callback`.
 - Prosthiki `src/services/auth.ts` me `signInWithGoogle` kai `signOut`.
-- To main screen deixnei compact account panel: Google sign-in, signed-in email, sign-out.
+- To app einai pleon login-gated: xwris session deixnei mono Google sign-in screen.
+- Prosthiki `Settings` tab gia account info kai logout. Meta to logout o xristis epistrefei sto login screen.
 - Prosthiki migration `20260628100000_add_saved_opportunities.sql` me `saved_opportunities`, RLS policies kai per-user access.
 - Fasi 1 einai login/logout + schema. Save/unsave buttons kai `Saved` tab paramenoun gia Fasi 2.
 - To Expo `name` paramenei `Prizen`, alla to EAS `slug` kratithike `opportunity-radar` giati to yparxon `extra.eas.projectId` einai syndedemeno me auto to project slug.

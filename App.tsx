@@ -30,6 +30,7 @@ import {
 
 type Filter =
   | 'all'
+  | 'settings'
   | 'giveaways'
   | 'freetoplay'
   | 'launches'
@@ -58,6 +59,7 @@ type PreparedOpportunity = Opportunity & {
 
 const filters: { id: Filter; label: string }[] = [
   { id: 'all', label: 'Όλα' },
+  { id: 'settings', label: 'Settings' },
   { id: 'giveaways', label: 'Giveaways' },
   { id: 'freetoplay', label: 'Free to Play' },
   { id: 'launches', label: 'Launches' },
@@ -102,6 +104,7 @@ export default function App() {
   const [refreshing, setRefreshing] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [session, setSession] = useState<Session | null>(null);
+  const [authReady, setAuthReady] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
 
   const fetchOpportunities = useCallback(async (silent = false) => {
@@ -121,16 +124,21 @@ export default function App() {
   }, [fetchOpportunities]);
 
   useEffect(() => {
-    if (!isSupabaseConfigured) return;
+    if (!isSupabaseConfigured) {
+      setAuthReady(true);
+      return;
+    }
 
     void supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
+      setAuthReady(true);
     });
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession);
+      setAuthReady(true);
     });
 
     return () => subscription.unsubscribe();
@@ -177,6 +185,8 @@ export default function App() {
   );
 
   const visibleOpportunities = useMemo(() => {
+    if (deferredFilter === 'settings') return [];
+
     const normalizedQuery = deferredQuery.trim().toLocaleLowerCase('el');
 
     return preparedOpportunities.filter((opportunity) => {
@@ -208,6 +218,54 @@ export default function App() {
     ({ item }: { item: Opportunity }) => <OpportunityCard opportunity={item} />,
     [],
   );
+
+  if (!authReady) {
+    return (
+      <LinearGradient colors={['#071A1C', '#081112', '#050808']} style={styles.gradient}>
+        <SafeAreaView style={styles.safeArea}>
+          <StatusBar style="light" />
+          <View style={styles.authScreen}>
+            <ActivityIndicator color="#D9FF57" />
+          </View>
+        </SafeAreaView>
+      </LinearGradient>
+    );
+  }
+
+  if (!session) {
+    return (
+      <LinearGradient colors={['#071A1C', '#081112', '#050808']} style={styles.gradient}>
+        <SafeAreaView style={styles.safeArea}>
+          <StatusBar style="light" />
+          <View style={styles.loginScreen}>
+            <View style={styles.loginHeader}>
+              <Text style={styles.loginTitle}>PRIZEN</Text>
+              <Text style={styles.loginSubtitle}>Sign in to track and save opportunities.</Text>
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              disabled={authLoading || !isSupabaseConfigured}
+              onPress={handleGoogleSignIn}
+              style={({ pressed }) => [
+                styles.loginButton,
+                pressed && styles.authButtonPressed,
+                (authLoading || !isSupabaseConfigured) && styles.authButtonDisabled,
+              ]}
+            >
+              {authLoading ? (
+                <ActivityIndicator size="small" color="#071A1C" />
+              ) : (
+                <Text style={styles.loginButtonText}>Continue with Google</Text>
+              )}
+            </Pressable>
+            {!isSupabaseConfigured && (
+              <Text style={styles.loginNotice}>Supabase is not configured.</Text>
+            )}
+          </View>
+        </SafeAreaView>
+      </LinearGradient>
+    );
+  }
 
   return (
     <LinearGradient colors={['#071A1C', '#081112', '#050808']} style={styles.gradient}>
@@ -256,51 +314,24 @@ export default function App() {
                 </View>
               </View>
 
-              <View style={styles.authPanel}>
-                <View style={styles.authCopy}>
-                  <Text style={styles.authLabel}>
-                    {session ? 'Account' : 'Save opportunities'}
-                  </Text>
-                  <Text numberOfLines={1} style={styles.authText}>
-                    {session?.user.email ?? 'Sign in to save favorites soon.'}
-                  </Text>
-                </View>
-                <Pressable
-                  accessibilityRole="button"
-                  disabled={authLoading || !isSupabaseConfigured}
-                  onPress={session ? handleSignOut : handleGoogleSignIn}
-                  style={({ pressed }) => [
-                    styles.authButton,
-                    pressed && styles.authButtonPressed,
-                    (authLoading || !isSupabaseConfigured) && styles.authButtonDisabled,
-                  ]}
-                >
-                  {authLoading ? (
-                    <ActivityIndicator size="small" color="#071A1C" />
-                  ) : (
-                    <Text style={styles.authButtonText}>
-                      {session ? 'Sign out' : 'Google'}
-                    </Text>
+              {filter !== 'settings' && (
+                <View style={styles.searchBox}>
+                  <Text style={styles.searchIcon}>⌕</Text>
+                  <TextInput
+                    value={query}
+                    onChangeText={setQuery}
+                    placeholder="Αναζήτηση ευκαιριών..."
+                    placeholderTextColor="#718082"
+                    style={styles.searchInput}
+                    returnKeyType="search"
+                  />
+                  {query.length > 0 && (
+                    <Pressable onPress={() => setQuery('')} hitSlop={12}>
+                      <Text style={styles.clearIcon}>×</Text>
+                    </Pressable>
                   )}
-                </Pressable>
-              </View>
-
-              <View style={styles.searchBox}>
-                <Text style={styles.searchIcon}>⌕</Text>
-                <TextInput
-                  value={query}
-                  onChangeText={setQuery}
-                  placeholder="Αναζήτηση ευκαιριών..."
-                  placeholderTextColor="#718082"
-                  style={styles.searchInput}
-                  returnKeyType="search"
-                />
-                {query.length > 0 && (
-                  <Pressable onPress={() => setQuery('')} hitSlop={12}>
-                    <Text style={styles.clearIcon}>×</Text>
-                  </Pressable>
-                )}
-              </View>
+                </View>
+              )}
 
               <ScrollView
                 horizontal
@@ -348,12 +379,36 @@ export default function App() {
                 </ScrollView>
               )}
 
-              <View style={styles.sectionHeading}>
-                <Text style={styles.sectionTitle}>Τελευταίες ευκαιρίες</Text>
-                <Text style={styles.resultCount}>{visibleOpportunities.length} RESULTS</Text>
-              </View>
+              {filter === 'settings' ? (
+                <View style={styles.settingsPanel}>
+                  <Text style={styles.settingsTitle}>Account</Text>
+                  <Text style={styles.settingsLabel}>Signed in as</Text>
+                  <Text style={styles.settingsEmail}>{session.user.email}</Text>
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled={authLoading}
+                    onPress={handleSignOut}
+                    style={({ pressed }) => [
+                      styles.logoutButton,
+                      pressed && styles.authButtonPressed,
+                      authLoading && styles.authButtonDisabled,
+                    ]}
+                  >
+                    {authLoading ? (
+                      <ActivityIndicator size="small" color="#071A1C" />
+                    ) : (
+                      <Text style={styles.logoutButtonText}>Sign out</Text>
+                    )}
+                  </Pressable>
+                </View>
+              ) : (
+                <View style={styles.sectionHeading}>
+                  <Text style={styles.sectionTitle}>Τελευταίες ευκαιρίες</Text>
+                  <Text style={styles.resultCount}>{visibleOpportunities.length} RESULTS</Text>
+                </View>
+              )}
 
-              {notice && (
+              {notice && filter !== 'settings' && (
                 <Pressable
                   onPress={() => Linking.openURL('https://supabase.com/dashboard')}
                   style={styles.notice}
@@ -367,7 +422,7 @@ export default function App() {
           renderItem={renderOpportunity}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           ListEmptyComponent={
-            loading ? (
+            filter === 'settings' ? null : loading ? (
               <View style={styles.emptyState}>
                 <ActivityIndicator color="#D9FF57" />
                 <Text style={styles.emptyText}>Φορτώνω τις ευκαιρίες...</Text>
@@ -427,32 +482,36 @@ const styles = StyleSheet.create({
   },
   statValue: { color: '#D9FF57', fontSize: 17, fontWeight: '800' },
   statLabel: { color: '#8FB3AE', fontSize: 11, fontWeight: '700' },
-  authPanel: {
-    minHeight: 52,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#243436',
-    backgroundColor: '#0E1718',
-    flexDirection: 'row',
+  authScreen: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  loginScreen: {
+    flex: 1,
+    paddingHorizontal: 26,
     alignItems: 'center',
-    paddingHorizontal: 13,
-    paddingVertical: 9,
+    justifyContent: 'center',
   },
-  authCopy: { flex: 1, paddingRight: 10 },
-  authLabel: { color: '#7DE0CF', fontSize: 10, fontWeight: '900', letterSpacing: 1 },
-  authText: { color: '#DCE8E5', fontSize: 13, fontWeight: '700', marginTop: 4 },
-  authButton: {
-    minWidth: 84,
-    height: 34,
-    borderRadius: 10,
+  loginHeader: { alignItems: 'center', marginBottom: 28 },
+  loginTitle: { color: '#D9FF57', fontSize: 34, fontWeight: '900', letterSpacing: 2 },
+  loginSubtitle: {
+    color: '#B8C7C4',
+    fontSize: 15,
+    lineHeight: 22,
+    marginTop: 10,
+    textAlign: 'center',
+    maxWidth: 280,
+  },
+  loginButton: {
+    width: '100%',
+    maxWidth: 320,
+    height: 50,
+    borderRadius: 14,
     backgroundColor: '#D9FF57',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 12,
   },
   authButtonPressed: { opacity: 0.75, transform: [{ scale: 0.98 }] },
   authButtonDisabled: { opacity: 0.5 },
-  authButtonText: { color: '#071A1C', fontSize: 12, fontWeight: '900' },
+  loginButtonText: { color: '#071A1C', fontSize: 15, fontWeight: '900' },
+  loginNotice: { color: '#CECFA7', fontSize: 12, marginTop: 14, textAlign: 'center' },
   searchBox: {
     height: 54,
     marginTop: 18,
@@ -512,6 +571,26 @@ const styles = StyleSheet.create({
   },
   noticeDot: { color: '#D9FF57', fontSize: 9, marginRight: 9 },
   noticeText: { flex: 1, color: '#CECFA7', fontSize: 12, lineHeight: 17 },
+  settingsPanel: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#243436',
+    backgroundColor: '#0E1718',
+    padding: 18,
+    marginTop: 24,
+  },
+  settingsTitle: { color: '#F2F6F4', fontSize: 20, fontWeight: '900' },
+  settingsLabel: { color: '#7DE0CF', fontSize: 10, fontWeight: '900', marginTop: 18 },
+  settingsEmail: { color: '#DCE8E5', fontSize: 14, fontWeight: '700', marginTop: 6 },
+  logoutButton: {
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#D9FF57',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 18,
+  },
+  logoutButtonText: { color: '#071A1C', fontSize: 14, fontWeight: '900' },
   separator: { height: 12 },
   emptyState: { alignItems: 'center', paddingVertical: 55 },
   emptyGlyph: { color: '#D9FF57', fontSize: 38, marginBottom: 10 },
