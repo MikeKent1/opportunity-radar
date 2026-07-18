@@ -37,18 +37,20 @@ if (!supabaseUrl || !serviceRoleKey) {
 
 const supabase = createClient(supabaseUrl, serviceRoleKey);
 const giveawaySources = ['gamerpower', 'epicgames', 'cheapshark', 'kingsumo'];
-const rewardSubcategorySet = new Set(rewardSubcategories);
+const rewardSubcategorySet = new Set([
+  ...rewardSubcategories,
+  'games',
+  'gift cards',
+  'in-game',
+  'trips',
+]);
 
 function normalizeGeneratedRewardTag(opportunity, subcategory) {
   if (!['web', 'social'].includes(opportunity.source_type)) return opportunity.tags;
   if (!Array.isArray(opportunity.tags) || opportunity.tags.length === 0) return opportunity.tags;
 
-  const nextTags = [...opportunity.tags];
-  const lastTag = String(nextTags.at(-1) ?? '').toLowerCase();
-  if (rewardSubcategorySet.has(lastTag) && lastTag !== subcategory) {
-    nextTags[nextTags.length - 1] = subcategory;
-  }
-
+  const nextTags = opportunity.tags.filter((tag) => !rewardSubcategorySet.has(String(tag).toLowerCase()));
+  nextTags.push(subcategory);
   return nextTags;
 }
 
@@ -61,7 +63,7 @@ function tagsChanged(left, right) {
 const { data, error } = await supabase
   .from('opportunities')
   .select(
-    'id, source, source_type, category, subcategory, classification_method, classification_confidence, classification_reason, needs_review, title, organization, summary, tags, raw_data',
+    'id, source, source_type, category, subcategory, classification_method, classification_confidence, classification_reason, needs_review, title, organization, summary, clean_summary, prize_description, eligibility, tags, raw_data',
   )
   .eq('status', 'active')
   .or(`source.in.(${giveawaySources.join(',')}),source_type.eq.social,category.eq.giveaways`);

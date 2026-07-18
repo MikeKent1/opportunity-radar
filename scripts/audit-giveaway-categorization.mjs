@@ -139,6 +139,9 @@ function buildText(opportunity) {
 
   return [
     opportunity.title,
+    opportunity.clean_summary,
+    opportunity.prize_description,
+    opportunity.eligibility,
     opportunity.summary,
     opportunity.organization,
     opportunity.source,
@@ -165,7 +168,7 @@ function auditOpportunity(opportunity) {
   const classifier = classifyRewardType(opportunity);
   const issues = [];
 
-  if (current !== classifier) {
+  if (opportunity.classification_method !== 'ai' && current !== classifier) {
     addIssue(issues, 'high', classifier, `stored subcategory differs from classifier (${classifier})`);
   }
 
@@ -208,7 +211,9 @@ function auditOpportunity(opportunity) {
 
 const { data, error } = await supabase
   .from('opportunities')
-  .select('id, source, source_type, category, subcategory, title, organization, summary, tags, raw_data')
+  .select(
+    'id, source, source_type, category, subcategory, classification_method, title, organization, summary, clean_summary, prize_description, eligibility, tags, raw_data',
+  )
   .eq('status', 'active')
   .or(`source.in.(${giveawaySources.join(',')}),source_type.eq.social,category.eq.giveaways`);
 

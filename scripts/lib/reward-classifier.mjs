@@ -136,6 +136,9 @@ export function classifyRewardType(opportunity) {
   const haystack = lower(
     [
       opportunity?.title,
+      opportunity?.clean_summary,
+      opportunity?.prize_description,
+      opportunity?.eligibility,
       opportunity?.summary,
       opportunity?.organization,
       opportunity?.source,

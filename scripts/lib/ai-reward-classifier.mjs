@@ -3,6 +3,13 @@ import { classifyRewardType, rewardSubcategories } from './reward-classifier.mjs
 const text = (value) => String(value ?? '').trim();
 const lower = (value) => text(value).toLowerCase();
 const allowedSubcategories = new Set(rewardSubcategories);
+const generatedRewardTags = new Set([
+  ...rewardSubcategories,
+  'games',
+  'gift cards',
+  'in-game',
+  'trips',
+]);
 const moneyAmountPattern = /(?:[$\u20AC\u00A3]\s?\d{2,}(?:[,.]\d{3})*(?:\.\d{2})?|\b\d{2,}(?:[,.]\d{3})*(?:\.\d{2})?\s?(?:usd|eur|gbp|dollars?|euros?|pounds?)\b)/i;
 
 function setting(key, env = {}) {
@@ -12,10 +19,12 @@ function setting(key, env = {}) {
 
 function buildText(opportunity) {
   const raw = opportunity?.raw_data && typeof opportunity.raw_data === 'object' ? opportunity.raw_data : {};
-  const tags = Array.isArray(opportunity?.tags) ? opportunity.tags : [];
+  const tags = Array.isArray(opportunity?.tags)
+    ? opportunity.tags.filter((tag) => !generatedRewardTags.has(lower(tag)))
+    : [];
   return [
     opportunity?.title,
-    opportunity?.summary,
+    opportunity?.clean_summary ?? opportunity?.summary,
     opportunity?.organization,
     opportunity?.source,
     opportunity?.source_type,
@@ -27,6 +36,12 @@ function buildText(opportunity) {
     raw.details,
     raw.title,
   ].join(' ');
+}
+
+function cleanTags(tags) {
+  return Array.isArray(tags)
+    ? tags.filter((tag) => !generatedRewardTags.has(lower(tag)))
+    : [];
 }
 
 function ruleConfidence(opportunity, subcategory) {
@@ -135,12 +150,14 @@ export async function classifyRewardTypeWithAi(opportunity, options = {}) {
           current_rules_guess: fallback.subcategory,
           opportunity: {
             title: opportunity?.title,
-            summary: opportunity?.summary,
+            clean_summary: opportunity?.clean_summary,
+            prize_description: opportunity?.prize_description,
+            eligibility: opportunity?.eligibility,
+            summary: opportunity?.clean_summary ? undefined : opportunity?.summary,
             organization: opportunity?.organization,
             source: opportunity?.source,
             source_type: opportunity?.source_type,
-            tags: opportunity?.tags,
-            raw_data: opportunity?.raw_data,
+            tags: cleanTags(opportunity?.tags),
           },
         }),
       },
