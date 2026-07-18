@@ -213,8 +213,8 @@ Latest checked results:
 npx tsc --noEmit -> passed
 npx expo-doctor -> 21/21 passed
 npm run rewards:audit -> 458 audited, 0 high flagged, 5 medium review candidates
-npm run giveaways:enrich -> 81 active giveaways enriched with AI so far
-AI enrichment tuning -> avg quality 0.73, 17/81 with risk flags, 72/81 with quality notes
+npm run giveaways:enrich -> 358/358 active web/social giveaways enriched with AI
+AI enrichment coverage -> avg quality 0.68, 132/358 with risk flags, 347/358 with quality notes
 npm run pipeline:health -> expiredActive: 0
 ```
 
