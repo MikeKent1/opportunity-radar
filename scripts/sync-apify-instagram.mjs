@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { createClient } from '@supabase/supabase-js';
+import { enrichGiveawayWithAi } from './lib/ai-giveaway-enrichment.mjs';
 import { classifyRewardTypeWithAi } from './lib/ai-reward-classifier.mjs';
 
 const env = fs.existsSync('.env')
@@ -505,45 +506,72 @@ try {
     postsSaved += socialPosts.length;
   }
 
-  const opportunities = socialPosts
+  const opportunities = await Promise.all(socialPosts
     .filter((post) => post.raw_data.detection.isGiveaway)
-    .map((post) => ({
-      external_id: `instagram:${post.platform_post_id}`,
-      source: post.source.username,
-      source_type: 'social',
-      category: 'giveaways',
-      subcategory: post.raw_data.detection.subcategory,
-      classification_method:
-        post.raw_data.detection.classification?.classification_method ?? 'rules',
-      classification_confidence:
-        post.raw_data.detection.classification?.classification_confidence ?? null,
-      classification_reason:
-        post.raw_data.detection.classification?.classification_reason ?? null,
-      needs_review: post.raw_data.detection.classification?.needs_review ?? false,
-      title: buildTitle(post.caption, post.source),
-      organization: post.source.display_name || `@${post.source.username}`,
-      summary: post.caption,
-      url: post.post_url,
-      participation_url: post.post_url,
-      image_url: getImageUrl(post.raw_data),
-      amount: null,
-      currency: 'USD',
-      deadline: null,
-      expires_at: null,
-      participation_steps: buildParticipationSteps(post.caption),
-      tags: [
+    .map(async (post) => {
+      const title = buildTitle(post.caption, post.source);
+      const participationSteps = buildParticipationSteps(post.caption);
+      const tags = [
         'Instagram',
         'Social',
         post.raw_data.detection.subcategory,
         ...post.raw_data.detection.matchedKeywords.slice(0, 3),
-      ].filter(Boolean),
-      status: 'active',
-      published_at: post.posted_at ?? new Date().toISOString(),
-      raw_data: {
-        source: post.source,
-        post: post.raw_data,
-        detector: post.raw_data.detection.classification?.classification_method ?? 'rules',
-      },
+      ].filter(Boolean);
+      const enrichment = await enrichGiveawayWithAi({
+        source: post.source.username,
+        source_type: 'social',
+        category: 'giveaways',
+        subcategory: post.raw_data.detection.subcategory,
+        title,
+        organization: post.source.display_name || `@${post.source.username}`,
+        summary: post.caption,
+        deadline: null,
+        participation_steps: participationSteps,
+        tags,
+        raw_data: post.raw_data,
+      });
+
+      return {
+        external_id: `instagram:${post.platform_post_id}`,
+        source: post.source.username,
+        source_type: 'social',
+        category: 'giveaways',
+        subcategory: post.raw_data.detection.subcategory,
+        classification_method:
+          post.raw_data.detection.classification?.classification_method ?? 'rules',
+        classification_confidence:
+          post.raw_data.detection.classification?.classification_confidence ?? null,
+        classification_reason:
+          post.raw_data.detection.classification?.classification_reason ?? null,
+        needs_review: post.raw_data.detection.classification?.needs_review ?? false,
+        clean_summary: enrichment.clean_summary,
+        prize_description: enrichment.prize_description,
+        eligibility: enrichment.eligibility,
+        quality_score: enrichment.quality_score,
+        risk_flags: enrichment.risk_flags,
+        enrichment_method: enrichment.enrichment_method,
+        enrichment_reason: enrichment.enrichment_reason,
+        title,
+        organization: post.source.display_name || `@${post.source.username}`,
+        summary: post.caption,
+        url: post.post_url,
+        participation_url: post.post_url,
+        image_url: getImageUrl(post.raw_data),
+        amount: null,
+        currency: 'USD',
+        deadline: null,
+        expires_at: null,
+        participation_steps: participationSteps,
+        tags,
+        status: 'active',
+        published_at: post.posted_at ?? new Date().toISOString(),
+        raw_data: {
+          source: post.source,
+          post: post.raw_data,
+          detector: post.raw_data.detection.classification?.classification_method ?? 'rules',
+          enrichment,
+        },
+      };
     }));
 
   for (const opportunity of opportunities) {

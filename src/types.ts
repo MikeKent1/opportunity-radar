@@ -23,6 +23,11 @@ export type Opportunity = {
   title: string;
   organization: string;
   summary: string;
+  clean_summary?: string | null;
+  prize_description?: string | null;
+  eligibility?: string | null;
+  quality_score?: number | null;
+  risk_flags?: string[] | null;
   url: string;
   participation_url?: string | null;
   image_url: string | null;

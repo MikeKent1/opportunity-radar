@@ -177,6 +177,7 @@ npm run expired:cleanup
 npm run pipeline:health
 npm run rewards:audit
 npm run rewards:backfill
+npm run giveaways:enrich
 ```
 
 Recent data quality work:
@@ -188,6 +189,11 @@ Recent data quality work:
   - If `OPENAI_API_KEY` is configured, ambiguous rewards can be classified by AI.
   - The pipeline stores `classification_method`, `classification_confidence`,
     `classification_reason`, and `needs_review` on opportunities.
+- AI-assisted giveaway enrichment was added for web/social giveaways.
+  - The pipeline can store `clean_summary`, `prize_description`, `eligibility`,
+    `quality_score`, `risk_flags`, `enrichment_method`, and `enrichment_reason`.
+  - The mobile app prefers `clean_summary` in cards and details when available.
+  - Detail pages show `Prize` and `Eligibility` sections when AI extracted them.
 - Reward backfill now cleans stale generated reward tags for web/social imports.
 - The classifier no longer lets old `subcategory` values bias new classification.
 - Travel/gift-card/cash edge cases were tightened.
@@ -203,6 +209,7 @@ Latest checked results:
 npx tsc --noEmit -> passed
 npx expo-doctor -> 21/21 passed
 npm run rewards:audit -> 458 audited, 0 high flagged, 5 medium review candidates
+npm run giveaways:enrich -> 80 active giveaways enriched with AI so far
 npm run pipeline:health -> expiredActive: 0
 ```
 
@@ -240,6 +247,9 @@ OPENAI_API_KEY=...
 OPENAI_CLASSIFIER_MODEL=gpt-5.4-mini
 AI_REWARD_CLASSIFIER_ENABLED=true
 AI_REWARD_CLASSIFIER_MODE=uncertain
+OPENAI_ENRICHMENT_MODEL=gpt-5.4-mini
+AI_GIVEAWAY_ENRICHMENT_ENABLED=true
+AI_ENRICHMENT_BACKFILL_LIMIT=80
 ```
 
 ## GitHub / Deployment
@@ -262,6 +272,7 @@ The Vercel project deploys from the GitHub repo using the `site/` root directory
 - `src/utils/displayText.ts` - display text cleanup
 - `scripts/lib/reward-classifier.mjs` - giveaway reward classifier
 - `scripts/lib/ai-reward-classifier.mjs` - optional AI-assisted reward classifier
+- `scripts/lib/ai-giveaway-enrichment.mjs` - optional AI-assisted giveaway enrichment
 - `scripts/audit-giveaway-categorization.mjs` - reward categorization audit
 - `scripts/close-expired-opportunities.mjs` - closes expired active opportunities
 - `scripts/pipeline-health.mjs` - source and data health summary

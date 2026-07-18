@@ -69,6 +69,12 @@ const providers = [
     label: 'Reward categorization',
     script: 'scripts/backfill-giveaway-rewards.mjs',
   },
+  {
+    id: 'giveaway-enrichment',
+    label: 'Giveaway enrichment',
+    script: 'scripts/backfill-giveaway-enrichment.mjs',
+    optional: true,
+  },
 ];
 
 const timeoutMs = Number(process.env.SYNC_PROVIDER_TIMEOUT_MS ?? 180_000);
@@ -89,6 +95,7 @@ const sensitiveValues = [
   'REDDIT_CLIENT_SECRET',
   'APIFY_TOKEN',
   'INSTAGRAM_ACTOR_ID',
+  'OPENAI_API_KEY',
 ]
   .map((key) => mergedEnv[key])
   .filter(Boolean);

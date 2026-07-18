@@ -536,7 +536,7 @@ export default function App() {
         isGiveaway: isGiveawayOpportunity(opportunity),
         normalizedTags: opportunity.tags.map((tag) => tag.toLocaleLowerCase('en')),
         searchText:
-          `${opportunity.title} ${opportunity.organization} ${opportunity.summary}`.toLocaleLowerCase(
+          `${opportunity.title} ${opportunity.organization} ${opportunity.summary} ${opportunity.clean_summary ?? ''} ${opportunity.prize_description ?? ''} ${opportunity.eligibility ?? ''}`.toLocaleLowerCase(
             'en',
           ),
       })),
@@ -912,8 +912,28 @@ export default function App() {
 
                   <View style={styles.detailSection}>
                     <Text style={styles.detailSectionTitle}>Summary</Text>
-                    <Text style={styles.detailBody}>{cleanDisplayText(selectedOpportunity.summary)}</Text>
+                    <Text style={styles.detailBody}>
+                      {cleanDisplayText(selectedOpportunity.clean_summary || selectedOpportunity.summary)}
+                    </Text>
                   </View>
+
+                  {selectedOpportunity.prize_description && (
+                    <View style={styles.detailSection}>
+                      <Text style={styles.detailSectionTitle}>Prize</Text>
+                      <Text style={styles.detailBody}>
+                        {cleanDisplayText(selectedOpportunity.prize_description)}
+                      </Text>
+                    </View>
+                  )}
+
+                  {selectedOpportunity.eligibility && (
+                    <View style={styles.detailSection}>
+                      <Text style={styles.detailSectionTitle}>Eligibility</Text>
+                      <Text style={styles.detailBody}>
+                        {cleanDisplayText(selectedOpportunity.eligibility)}
+                      </Text>
+                    </View>
+                  )}
 
                   {selectedOpportunity.participation_steps?.length ? (
                     <View style={styles.detailSection}>

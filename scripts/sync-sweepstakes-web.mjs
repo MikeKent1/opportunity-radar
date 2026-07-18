@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import { createClient } from '@supabase/supabase-js';
 import { XMLParser } from 'fast-xml-parser';
 import { classifyRewardTypeWithAi } from './lib/ai-reward-classifier.mjs';
+import { enrichGiveawayWithAi } from './lib/ai-giveaway-enrichment.mjs';
 
 const env = fs.existsSync('.env')
   ? Object.fromEntries(
@@ -392,6 +393,23 @@ async function normalizeCandidate(candidate) {
     tags: ['Sweepstakes', 'Web'],
   });
   const { subcategory } = classification;
+  const enrichment = await enrichGiveawayWithAi({
+    source: 'sweepstakes_web',
+    source_type: 'web',
+    category: 'giveaways',
+    subcategory,
+    title: candidate.title,
+    summary,
+    organization: candidate.organization,
+    deadline: candidate.deadline,
+    tags: ['Sweepstakes', 'Web', candidate.sourceLabel, subcategory].filter(Boolean),
+    raw_data: {
+      provider: 'sweepstakes:web',
+      sourcePage: candidate.sourcePage,
+      sourceLabel: candidate.sourceLabel,
+      details: candidate.details,
+    },
+  });
 
   return {
     external_id: hash(`${candidate.url}:${candidate.title}`),
@@ -403,6 +421,13 @@ async function normalizeCandidate(candidate) {
     classification_confidence: classification.classification_confidence,
     classification_reason: classification.classification_reason,
     needs_review: classification.needs_review,
+    clean_summary: enrichment.clean_summary,
+    prize_description: enrichment.prize_description,
+    eligibility: enrichment.eligibility,
+    quality_score: enrichment.quality_score,
+    risk_flags: enrichment.risk_flags,
+    enrichment_method: enrichment.enrichment_method,
+    enrichment_reason: enrichment.enrichment_reason,
     title: candidate.title,
     organization: candidate.organization,
     summary: summary.slice(0, 700),
@@ -423,6 +448,7 @@ async function normalizeCandidate(candidate) {
       sourceLabel: candidate.sourceLabel,
       details: candidate.details,
       classification,
+      enrichment,
     },
   };
 }

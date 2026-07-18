@@ -52,6 +52,7 @@ function OpportunityCardComponent({
   const isFeed = opportunity.source === 'rss';
   const isCommunity = opportunity.source === 'reddit';
   const isSocial = opportunity.source_type === 'social';
+  const displaySummary = opportunity.clean_summary || opportunity.summary;
   const sourceLabel =
     isSocial
       ? `INSTAGRAM @${opportunity.source}`.toUpperCase()
@@ -172,7 +173,7 @@ function OpportunityCardComponent({
         <Text style={styles.organization}>{opportunity.organization}</Text>
         <Text style={styles.title}>{cleanDisplayText(opportunity.title)}</Text>
         <Text numberOfLines={3} style={styles.summary}>
-          {cleanDisplayText(opportunity.summary)}
+          {cleanDisplayText(displaySummary)}
         </Text>
 
         <View style={styles.tags}>
