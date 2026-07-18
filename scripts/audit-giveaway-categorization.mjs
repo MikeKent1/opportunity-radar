@@ -65,8 +65,12 @@ const hasMoneyAmount = (text) =>
   );
 const hasGiftCard = (text) =>
   includesAny(text, [
+    'concert cash',
     'gift card',
     'giftcard',
+    'prepaid card',
+    'visa card',
+    'mastercard',
     'voucher',
     'store credit',
     'amazon card',
@@ -84,6 +88,9 @@ const hasTravel = (text) =>
     text,
   ) ||
   /\b(night stay|hotel stay|stay for two|luxury escape|dream trip|around the world cruise)\b/i.test(
+    text,
+  ) ||
+  /\b(concert experience|flyaway|travel package|trip prize)\b/i.test(
     text,
   );
 const hasHardware = (text) =>
@@ -115,7 +122,9 @@ const hasHardware = (text) =>
     'steelseries',
   ]);
 const hasInGame = (text) =>
-  includesAny(text, [
+  includesAny(text, ['in-game', 'ingame']) ||
+  (includesAny(text, ['game', 'gaming', 'fortnite', 'roblox', 'minecraft', 'steam', 'xbox', 'playstation']) &&
+    includesAny(text, [
     'skin',
     'outfit',
     'cloak',
@@ -126,16 +135,15 @@ const hasInGame = (text) =>
     'coins',
     'gems',
     'loot',
-    'item',
-    'in-game',
-    'ingame',
-  ]);
+    'cosmetic',
+  ]));
 
 function buildText(opportunity) {
   const raw = opportunity.raw_data && typeof opportunity.raw_data === 'object' ? opportunity.raw_data : {};
   const tags = Array.isArray(opportunity.tags)
     ? opportunity.tags.filter((tag) => !rewardTags.has(String(tag).toLowerCase()))
     : [];
+  const hasCleanText = opportunity.clean_summary || opportunity.prize_description;
 
   return [
     opportunity.title,
@@ -150,9 +158,19 @@ function buildText(opportunity) {
     raw.platforms,
     raw.worth,
     raw.instructions,
-    raw.description,
-    raw.details,
+    hasCleanText ? undefined : raw.description,
+    hasCleanText ? undefined : raw.details,
     raw.title,
+  ]
+    .join(' ')
+    .toLowerCase();
+}
+
+function buildPrizeText(opportunity) {
+  return [
+    opportunity.prize_description,
+    opportunity.clean_summary,
+    opportunity.eligibility,
   ]
     .join(' ')
     .toLowerCase();
@@ -164,27 +182,36 @@ function addIssue(issues, severity, expected, reason) {
 
 function auditOpportunity(opportunity) {
   const text = buildText(opportunity);
+  const prizeText = buildPrizeText(opportunity);
   const current = opportunity.subcategory ?? 'other';
   const classifier = classifyRewardType(opportunity);
+  const confidence = Number(opportunity.classification_confidence);
+  const isHighConfidenceAi =
+    opportunity.classification_method === 'ai' && Number.isFinite(confidence) && confidence >= 0.85;
   const issues = [];
 
   if (opportunity.classification_method !== 'ai' && current !== classifier) {
     addIssue(issues, 'high', classifier, `stored subcategory differs from classifier (${classifier})`);
   }
 
-  if (current === 'gift_card' && hasTravel(text)) {
+  if (current === 'gift_card' && hasTravel(prizeText || text) && !hasGiftCard(prizeText || text)) {
     addIssue(issues, 'high', 'trip', 'gift card bucket includes a strong travel prize signal');
   }
 
-  if (current === 'cash' && hasGiftCard(text) && !includesAny(text, ['cash', 'paypal', 'bank transfer', 'venmo'])) {
+  if (
+    current === 'cash' &&
+    hasGiftCard(prizeText || text) &&
+    !hasMoneyAmount(prizeText || text) &&
+    !includesAny(prizeText || text, ['cash', 'paypal', 'bank transfer', 'venmo'])
+  ) {
     addIssue(issues, 'medium', 'gift_card', 'cash bucket looks more like voucher or store credit');
   }
 
-  if (current === 'trip' && !hasTravel(text) && hasGiftCard(text)) {
+  if (current === 'trip' && !hasTravel(prizeText || text) && hasGiftCard(prizeText || text)) {
     addIssue(issues, 'medium', 'gift_card', 'trip bucket has gift card language but no travel signal');
   }
 
-  if (current === 'hardware' && !hasHardware(text) && hasInGame(text)) {
+  if (current === 'hardware' && !hasHardware(text) && hasInGame(prizeText || text)) {
     addIssue(issues, 'medium', 'in_game_item', 'hardware bucket has in-game item language but no hardware signal');
   }
 
@@ -197,13 +224,13 @@ function auditOpportunity(opportunity) {
     addIssue(issues, 'low', 'in_game_item', 'game bucket may be an in-game reward');
   }
 
-  if (current === 'other') {
-    if (hasMoneyAmount(text) && !hasPrizeValueLanguage(text)) {
+  if (current === 'other' && !isHighConfidenceAi) {
+    if (hasMoneyAmount(prizeText || text) && !hasPrizeValueLanguage(prizeText || text)) {
       addIssue(issues, 'medium', 'cash', 'other bucket includes money amount');
     }
-    if (hasGiftCard(text)) addIssue(issues, 'medium', 'gift_card', 'other bucket includes gift card language');
-    if (hasTravel(text)) addIssue(issues, 'medium', 'trip', 'other bucket includes travel language');
-    if (hasHardware(text)) addIssue(issues, 'medium', 'hardware', 'other bucket includes hardware language');
+    if (hasGiftCard(prizeText || text)) addIssue(issues, 'medium', 'gift_card', 'other bucket includes gift card language');
+    if (hasTravel(prizeText || text)) addIssue(issues, 'medium', 'trip', 'other bucket includes travel language');
+    if (hasHardware(prizeText || text)) addIssue(issues, 'medium', 'hardware', 'other bucket includes hardware language');
   }
 
   return issues;
@@ -212,7 +239,7 @@ function auditOpportunity(opportunity) {
 const { data, error } = await supabase
   .from('opportunities')
   .select(
-    'id, source, source_type, category, subcategory, classification_method, title, organization, summary, clean_summary, prize_description, eligibility, tags, raw_data',
+    'id, source, source_type, category, subcategory, classification_method, classification_confidence, classification_reason, title, organization, summary, clean_summary, prize_description, eligibility, tags, raw_data',
   )
   .eq('status', 'active')
   .or(`source.in.(${giveawaySources.join(',')}),source_type.eq.social,category.eq.giveaways`);
