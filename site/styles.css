@@ -137,9 +137,24 @@ a {
 }
 
 .hero-logo {
-  width: min(360px, 82vw);
-  height: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 18px;
   margin-bottom: 34px;
+}
+
+.hero-logo img {
+  width: clamp(64px, 10vw, 92px);
+  height: clamp(64px, 10vw, 92px);
+  object-fit: contain;
+}
+
+.hero-logo span {
+  color: var(--brand);
+  font-size: clamp(44px, 8vw, 76px);
+  line-height: 1;
+  font-weight: 950;
+  letter-spacing: 0;
 }
 
 .hero h1 {
