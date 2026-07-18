@@ -334,6 +334,42 @@ function extractSweepWidgetCandidates(html, source) {
   return candidates;
 }
 
+function extractSweepWidgetDetail(html) {
+  const titleStart = html.search(/<h1\b/i);
+  const moreStart = html.search(/<h2\b[^>]*>\s*More Free Giveaways to Enter\s*<\/h2>/i);
+  const body = titleStart >= 0
+    ? html.slice(titleStart, moreStart > titleStart ? moreStart : titleStart + 6000)
+    : html.slice(0, moreStart > 0 ? moreStart : 6000);
+  return stripHtml(body);
+}
+
+async function fetchCandidateDetails(candidate) {
+  if (!/^https:\/\/sweepwidget\.com\/giveaways\/[^/?#]+/i.test(candidate.url)) {
+    return candidate;
+  }
+
+  try {
+    const response = await fetch(candidate.url, {
+      headers: {
+        Accept: 'text/html,application/xhtml+xml',
+        'User-Agent': 'OpportunityRadar/1.0 (+https://github.com/MikeKent1/opportunity-radar)',
+      },
+    });
+    if (!response.ok) return candidate;
+
+    const detailText = extractSweepWidgetDetail(await response.text());
+    if (!detailText || detailText.length < candidate.details.length) return candidate;
+
+    return {
+      ...candidate,
+      details: detailText,
+      detailPageText: detailText,
+    };
+  } catch {
+    return candidate;
+  }
+}
+
 function extractLuxuryTravelCandidates(html, source) {
   const candidates = [];
   const contestRegex =
@@ -387,11 +423,12 @@ function sourceUrls(source) {
 }
 
 async function normalizeCandidate(candidate) {
-  const summary = candidate.details || candidate.title;
+  const detailedCandidate = await fetchCandidateDetails(candidate);
+  const summary = detailedCandidate.details || detailedCandidate.title;
   const classification = await classifyRewardTypeWithAi({
     source: 'sweepstakes_web',
     source_type: 'web',
-    title: candidate.title,
+    title: detailedCandidate.title,
     summary,
     tags: ['Sweepstakes', 'Web'],
   });
@@ -401,21 +438,22 @@ async function normalizeCandidate(candidate) {
     source_type: 'web',
     category: 'giveaways',
     subcategory,
-    title: candidate.title,
+    title: detailedCandidate.title,
     summary,
-    organization: candidate.organization,
-    deadline: candidate.deadline,
-    tags: ['Sweepstakes', 'Web', candidate.sourceLabel, subcategory].filter(Boolean),
+    organization: detailedCandidate.organization,
+    deadline: detailedCandidate.deadline,
+    tags: ['Sweepstakes', 'Web', detailedCandidate.sourceLabel, subcategory].filter(Boolean),
     raw_data: {
       provider: 'sweepstakes:web',
-      sourcePage: candidate.sourcePage,
-      sourceLabel: candidate.sourceLabel,
-      details: candidate.details,
+      sourcePage: detailedCandidate.sourcePage,
+      sourceLabel: detailedCandidate.sourceLabel,
+      details: detailedCandidate.details,
+      detailPageText: detailedCandidate.detailPageText,
     },
   });
 
   return {
-    external_id: hash(`${candidate.url}:${candidate.title}`),
+    external_id: hash(`${detailedCandidate.url}:${detailedCandidate.title}`),
     source: 'sweepstakes_web',
     source_type: 'web',
     category: 'giveaways',
@@ -432,25 +470,26 @@ async function normalizeCandidate(candidate) {
     quality_notes: enrichment.quality_notes,
     enrichment_method: enrichment.enrichment_method,
     enrichment_reason: enrichment.enrichment_reason,
-    title: candidate.title,
-    organization: candidate.organization,
+    title: detailedCandidate.title,
+    organization: detailedCandidate.organization,
     summary: summary.slice(0, 700),
-    url: candidate.url,
-    participation_url: candidate.url,
+    url: detailedCandidate.url,
+    participation_url: detailedCandidate.url,
     image_url: null,
     amount: null,
     currency: 'USD',
-    deadline: candidate.deadline,
-    expires_at: candidate.deadline,
+    deadline: detailedCandidate.deadline,
+    expires_at: detailedCandidate.deadline,
     participation_steps: ['Open the official entry link', 'Read eligibility and rules', 'Complete the required entry steps'],
     tags: ['Sweepstakes', 'Web', candidate.sourceLabel, subcategory].filter(Boolean).slice(0, 6),
     status: 'active',
-    published_at: candidate.publishedAt ?? new Date().toISOString(),
+    published_at: detailedCandidate.publishedAt ?? new Date().toISOString(),
     raw_data: {
       provider: 'sweepstakes:web',
-      sourcePage: candidate.sourcePage,
-      sourceLabel: candidate.sourceLabel,
-      details: candidate.details,
+      sourcePage: detailedCandidate.sourcePage,
+      sourceLabel: detailedCandidate.sourceLabel,
+      details: detailedCandidate.details,
+      detailPageText: detailedCandidate.detailPageText,
       classification,
       enrichment,
     },

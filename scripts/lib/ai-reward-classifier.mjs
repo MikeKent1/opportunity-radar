@@ -130,7 +130,7 @@ export async function classifyRewardTypeWithAi(opportunity, options = {}) {
       {
         role: 'system',
         content:
-          'Classify giveaway rewards for Prizen. Choose the category that describes what the winner actually receives. A money amount can be retail value, not cash. Return only valid JSON matching the schema.',
+          'Classify giveaway rewards for Prizen. Choose the category that describes what the winner actually receives. A money amount can be retail value, not cash. Local passes, local classes, admission tickets, services, and mixed local prize packages are not cash; use other unless the main prize is clearly a gift card/voucher, trip, or direct cash payout. Return only valid JSON matching the schema.',
       },
       {
         role: 'user',
@@ -145,7 +145,7 @@ export async function classifyRewardTypeWithAi(opportunity, options = {}) {
             dlc: 'DLC, expansion, add-on.',
             in_game_item: 'Skins, items, currency, loot, cosmetics, weapons, mounts, packs inside a game.',
             software: 'Apps, SaaS, licenses, subscriptions, digital tools.',
-            other: 'Unclear or none of the above.',
+            other: 'Unclear, mixed prize package, local classes/passes/services, admission tickets, food/consumables, or none of the above.',
           },
           current_rules_guess: fallback.subcategory,
           opportunity: {

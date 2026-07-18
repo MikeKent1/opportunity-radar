@@ -39,6 +39,7 @@ import { cleanDisplayText } from './src/utils/displayText';
 const prizenAppIcon = require('./assets/prizen-icon.png');
 const prizenMark = require('./assets/prizen-mark-transparent.png');
 const OPPORTUNITY_PAGE_SIZE = 15;
+const localLimitingRiskFlags = new Set(['local_use_reward', 'region_limited']);
 const legalLinks = [
   { label: 'Privacy Policy', url: 'https://prizen.app/privacy' },
   { label: 'Terms of Service', url: 'https://prizen.app/terms' },
@@ -259,6 +260,7 @@ function getQualityScore(opportunity: PreparedOpportunity) {
 function getRiskPenalty(opportunity: PreparedOpportunity) {
   const flags = Array.isArray(opportunity.risk_flags) ? opportunity.risk_flags : [];
   return flags.reduce((penalty, flag) => {
+    if (localLimitingRiskFlags.has(flag)) return penalty + 0.7;
     if (flag === 'broken_text') return penalty + 0.4;
     if (flag === 'unclear_prize') return penalty + 0.3;
     if (flag === 'unclear_entry_path') return penalty + 0.2;
@@ -266,6 +268,11 @@ function getRiskPenalty(opportunity: PreparedOpportunity) {
     if (flag === 'engagement_bait' || flag === 'misleading_value') return penalty + 0.25;
     return penalty + 0.1;
   }, 0);
+}
+
+function isLocallyLimitedOpportunity(opportunity: PreparedOpportunity) {
+  const flags = Array.isArray(opportunity.risk_flags) ? opportunity.risk_flags : [];
+  return flags.some((flag) => localLimitingRiskFlags.has(flag));
 }
 
 function getOpportunityRankScore(opportunity: PreparedOpportunity) {
@@ -702,8 +709,13 @@ export default function App() {
       const matchesSecondary =
         !secondaryFilters[appliedFilter] ||
         matchesSecondaryFilter(opportunity, appliedFilter, appliedSecondaryFilter);
+      const shouldHideLocalLimited =
+        !normalizedQuery &&
+        appliedFilter !== 'saved' &&
+        isLocallyLimitedOpportunity(opportunity);
       return (
         matchesSecondary &&
+        !shouldHideLocalLimited &&
         (!normalizedQuery || opportunity.searchText.includes(normalizedQuery))
       );
     });

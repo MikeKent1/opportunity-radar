@@ -64,6 +64,13 @@ const hasTravelPrize = (haystack) =>
   /\b(night stay|hotel stay|stay for two|luxury escape|dream trip|around the world cruise)\b/i.test(
     haystack,
   );
+const hasLocalUseReward = (haystack) =>
+  /\b(local businesses?|local partners?|local favourites?|barrie location|specific location|pickup only|in-store only|local pickup)\b/i.test(
+    haystack,
+  ) ||
+  /\b(unlimited monthly pass|monthly pass|class pass|classes?|admission tickets?|water park passes?|venue passes?|passes to the)\b/i.test(
+    haystack,
+  );
 
 export const rewardSubcategories = [
   'game',
@@ -202,6 +209,10 @@ export function classifyRewardType(opportunity) {
     }
 
     return 'trip';
+  }
+
+  if (hasLocalUseReward(haystack)) {
+    return 'other';
   }
 
   if (

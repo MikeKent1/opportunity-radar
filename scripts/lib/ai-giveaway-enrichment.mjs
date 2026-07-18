@@ -100,7 +100,7 @@ export async function enrichGiveawayWithAi(opportunity, options = {}) {
       {
         role: 'system',
         content:
-          'Enrich giveaway listings for Prizen. Extract only facts supported by the provided text. Do not invent eligibility, dates, prize details, or entry requirements. Distinguish ordinary missing information from actual risk. Return valid JSON only.',
+          'Enrich giveaway listings for Prizen. Extract only facts supported by the provided text. Do not invent eligibility, dates, prize details, or entry requirements. Distinguish ordinary missing information from actual risk. Detect rewards that are only useful in a specific city, venue, branch, campus, or local service area. Return valid JSON only.',
       },
       {
         role: 'user',
@@ -111,11 +111,11 @@ export async function enrichGiveawayWithAi(opportunity, options = {}) {
             prize_description: 'What the winner receives. Max 18 words.',
             eligibility: 'Eligibility/geography/age if explicitly stated, otherwise null.',
             quality_score:
-              '0 to 1. Start around 0.70 for a valid but thin listing. Raise for clear prize/source/deadline/eligibility. Lower below 0.45 only for unclear prize, suspicious claims, spam, or unusable text.',
+              '0 to 1. Start around 0.70 for a valid but thin listing. Raise for clear prize/source/deadline/eligibility. Lower local-only/local-use rewards to around 0.35-0.55 unless the audience is clearly broad. Lower below 0.45 for unclear prize, suspicious claims, spam, unusable text, or rewards most users cannot use.',
             risk_flags:
-              'Use only for actual user risk or serious uncertainty: unclear_prize, suspicious_claims, engagement_bait, crypto_spam, broken_text, misleading_value, unclear_entry_path. Do not use missing_rules or vague_deadline here unless the listing is otherwise suspicious.',
+              'Use only for actual user risk or serious uncertainty: unclear_prize, suspicious_claims, engagement_bait, crypto_spam, broken_text, misleading_value, unclear_entry_path, local_use_reward, region_limited. Use local_use_reward when the prize is local passes, local classes, local services, tickets, pickup-only goods, or a venue-specific reward that many users cannot use. Use region_limited when eligibility is explicitly restricted to a country/state/province/city. Do not use missing_rules or vague_deadline here unless the listing is otherwise suspicious.',
             quality_notes:
-              'Non-risk limitations: missing_rules, vague_deadline, eligibility_not_stated, thin_listing, prize_value_unclear. Empty array if none.',
+              'Non-risk limitations: missing_rules, vague_deadline, eligibility_not_stated, thin_listing, prize_value_unclear, local_details_unclear. Empty array if none.',
             reason: 'Short internal explanation.',
           },
           opportunity: {
