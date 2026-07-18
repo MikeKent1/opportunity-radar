@@ -109,9 +109,12 @@ function decodeEntities(value) {
 
 function stripHtml(value) {
   return decodeEntities(value)
-    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<script[\s\S]*?(?:<\/script>|$)/gi, ' ')
+    .replace(/<style[\s\S]*?(?:<\/style>|$)/gi, ' ')
+    .replace(/<img\b[\s\S]*?(?:>|$)/gi, ' ')
     .replace(/<[^>]+>/g, ' ')
+    .replace(/\b(?:loading|decoding|width|height|src|class|alt|title|data-[\w-]+)=["'][^"']*["']/gi, ' ')
+    .replace(/^\d{10}\s+/, '')
     .replace(/\s+/g, ' ')
     .trim();
 }

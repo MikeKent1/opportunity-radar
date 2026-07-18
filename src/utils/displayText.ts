@@ -1,5 +1,10 @@
 export function cleanDisplayText(value: string | null | undefined) {
   return String(value ?? '')
+    .replace(/<script[\s\S]*?(?:<\/script>|$)/gi, ' ')
+    .replace(/<style[\s\S]*?(?:<\/style>|$)/gi, ' ')
+    .replace(/<img\b[\s\S]*?(?:>|$)/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\b(?:loading|decoding|width|height|src|class|alt|title|data-[\w-]+)=["'][^"']*["']/gi, ' ')
     .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
     .replace(/&#x([a-f0-9]+);/gi, (_, code) => String.fromCharCode(Number.parseInt(code, 16)))
     .replace(/&amp;/g, '&')
@@ -11,6 +16,7 @@ export function cleanDisplayText(value: string | null | undefined) {
     .replace(/&bull;/g, ' - ')
     .replace(/&ndash;/g, '-')
     .replace(/&mdash;/g, '-')
+    .replace(/^\d{10}\s+/, '')
     .replace(/\s+/g, ' ')
     .trim();
 }

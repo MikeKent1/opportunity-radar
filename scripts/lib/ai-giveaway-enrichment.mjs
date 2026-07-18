@@ -1,6 +1,18 @@
 const text = (value) => String(value ?? '').trim();
 const lower = (value) => text(value).toLowerCase();
 
+function cleanText(value) {
+  return text(value)
+    .replace(/<script[\s\S]*?(?:<\/script>|$)/gi, ' ')
+    .replace(/<style[\s\S]*?(?:<\/style>|$)/gi, ' ')
+    .replace(/<img\b[\s\S]*?(?:>|$)/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\b(?:loading|decoding|width|height|src|class|alt|title|data-[\w-]+)=["'][^"']*["']/gi, ' ')
+    .replace(/^\d{10}\s+/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function setting(key, env = {}) {
   const value = process.env[key] ?? env[key];
   return value && String(value).trim() ? String(value).trim() : undefined;
@@ -11,11 +23,11 @@ function compactList(values, limit = 8) {
 }
 
 function fallbackEnrichment(opportunity) {
-  const summary = text(opportunity?.summary || opportunity?.title).replace(/\s+/g, ' ').slice(0, 280);
+  const summary = cleanText(opportunity?.summary || opportunity?.title).slice(0, 280);
 
   return {
     clean_summary: summary,
-    prize_description: text(opportunity?.title).slice(0, 160),
+    prize_description: cleanText(opportunity?.title).slice(0, 160),
     eligibility: null,
     quality_score: 0.6,
     risk_flags: [],
@@ -88,7 +100,7 @@ export async function enrichGiveawayWithAi(opportunity, options = {}) {
           },
           opportunity: {
             title: opportunity?.title,
-            summary: opportunity?.summary,
+            summary: cleanText(opportunity?.summary),
             organization: opportunity?.organization,
             source: opportunity?.source,
             source_type: opportunity?.source_type,
