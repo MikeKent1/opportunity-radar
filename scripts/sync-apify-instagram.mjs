@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { createClient } from '@supabase/supabase-js';
-import { classifyRewardType } from './lib/reward-classifier.mjs';
+import { classifyRewardTypeWithAi } from './lib/ai-reward-classifier.mjs';
 
 const env = fs.existsSync('.env')
   ? Object.fromEntries(
@@ -177,7 +177,7 @@ function isRecentEnough(postedAt) {
   return postedTime >= new Date(daysAgo(newerThanDays)).getTime();
 }
 
-function detectGiveaway(caption) {
+async function detectGiveaway(caption) {
   const normalized = lower(caption);
   const matchedKeywords = giveawayKeywords.filter((keyword) => normalized.includes(keyword));
   const looksLikeGiveaway =
@@ -190,8 +190,14 @@ function detectGiveaway(caption) {
     return { isGiveaway: false, subcategory: null, matchedKeywords };
   }
 
-  const subcategory = classifyRewardType({ title: caption, summary: caption, tags: matchedKeywords });
-  return { isGiveaway: true, subcategory, matchedKeywords };
+  const classification = await classifyRewardTypeWithAi({
+    source: 'instagram',
+    source_type: 'social',
+    title: caption,
+    summary: caption,
+    tags: matchedKeywords,
+  });
+  return { isGiveaway: true, subcategory: classification.subcategory, matchedKeywords, classification };
 }
 
 function buildTitle(caption, source) {
@@ -436,8 +442,8 @@ try {
   );
   const posts = enabledSources.length ? await fetchLatestPostsForSources(enabledSources) : [];
 
-  const socialPosts = posts
-    .map((item) => {
+  const socialPosts = (
+    await Promise.all(posts.map(async (item) => {
       const username = getSourceUsername(item);
       const source = sourceByUsername.get(username);
       if (!source) return null;
@@ -446,7 +452,7 @@ try {
       const postUrl = getPostUrl(item, source.username);
       const platformPostId = getPlatformPostId(item, postUrl);
       const postedAt = getPostedAt(item);
-      const detection = detectGiveaway(caption);
+      const detection = await detectGiveaway(caption);
 
       return {
         source,
@@ -458,7 +464,8 @@ try {
         raw_data: { ...item, detection },
         ai_status: detection.isGiveaway ? 'rule_giveaway' : 'rule_not_giveaway',
       };
-    })
+    }))
+  )
     .filter(Boolean)
     .filter((post) => isRecentEnough(post.posted_at));
 
@@ -506,6 +513,13 @@ try {
       source_type: 'social',
       category: 'giveaways',
       subcategory: post.raw_data.detection.subcategory,
+      classification_method:
+        post.raw_data.detection.classification?.classification_method ?? 'rules',
+      classification_confidence:
+        post.raw_data.detection.classification?.classification_confidence ?? null,
+      classification_reason:
+        post.raw_data.detection.classification?.classification_reason ?? null,
+      needs_review: post.raw_data.detection.classification?.needs_review ?? false,
       title: buildTitle(post.caption, post.source),
       organization: post.source.display_name || `@${post.source.username}`,
       summary: post.caption,
@@ -528,7 +542,7 @@ try {
       raw_data: {
         source: post.source,
         post: post.raw_data,
-        detector: 'rule-based-v1',
+        detector: post.raw_data.detection.classification?.classification_method ?? 'rules',
       },
     }));
 

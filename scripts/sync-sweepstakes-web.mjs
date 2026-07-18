@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import { createClient } from '@supabase/supabase-js';
 import { XMLParser } from 'fast-xml-parser';
-import { classifyRewardType } from './lib/reward-classifier.mjs';
+import { classifyRewardTypeWithAi } from './lib/ai-reward-classifier.mjs';
 
 const env = fs.existsSync('.env')
   ? Object.fromEntries(
@@ -382,14 +382,16 @@ function sourceUrls(source) {
   return Array.from({ length: sweepWidgetPages }, (_, index) => pagedUrl(source.url, index + 1));
 }
 
-function normalizeCandidate(candidate) {
+async function normalizeCandidate(candidate) {
   const summary = candidate.details || candidate.title;
-  const subcategory = classifyRewardType({
+  const classification = await classifyRewardTypeWithAi({
     source: 'sweepstakes_web',
+    source_type: 'web',
     title: candidate.title,
     summary,
     tags: ['Sweepstakes', 'Web'],
   });
+  const { subcategory } = classification;
 
   return {
     external_id: hash(`${candidate.url}:${candidate.title}`),
@@ -397,6 +399,10 @@ function normalizeCandidate(candidate) {
     source_type: 'web',
     category: 'giveaways',
     subcategory,
+    classification_method: classification.classification_method,
+    classification_confidence: classification.classification_confidence,
+    classification_reason: classification.classification_reason,
+    needs_review: classification.needs_review,
     title: candidate.title,
     organization: candidate.organization,
     summary: summary.slice(0, 700),
@@ -416,6 +422,7 @@ function normalizeCandidate(candidate) {
       sourcePage: candidate.sourcePage,
       sourceLabel: candidate.sourceLabel,
       details: candidate.details,
+      classification,
     },
   };
 }
@@ -454,10 +461,10 @@ for (const source of sources) {
 }
 
 const now = Date.now();
+const normalizedCandidates = await Promise.all(candidates.map((candidate) => normalizeCandidate(candidate)));
 const deduped = [
   ...new Map(
-    candidates
-      .map(normalizeCandidate)
+    normalizedCandidates
       .filter((item) => !item.deadline || new Date(item.deadline).getTime() >= now - 86_400_000)
       .map((item) => [item.external_id, item]),
   ).values(),

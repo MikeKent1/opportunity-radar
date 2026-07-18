@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import { createClient } from '@supabase/supabase-js';
-import { classifyRewardType, rewardSubcategories } from './lib/reward-classifier.mjs';
+import { classifyRewardTypeWithAi } from './lib/ai-reward-classifier.mjs';
+import { rewardSubcategories } from './lib/reward-classifier.mjs';
 
 const env = fs.existsSync('.env')
   ? Object.fromEntries(
@@ -59,7 +60,9 @@ function tagsChanged(left, right) {
 
 const { data, error } = await supabase
   .from('opportunities')
-  .select('id, source, source_type, category, subcategory, title, organization, summary, tags, raw_data')
+  .select(
+    'id, source, source_type, category, subcategory, classification_method, classification_confidence, classification_reason, needs_review, title, organization, summary, tags, raw_data',
+  )
   .eq('status', 'active')
   .or(`source.in.(${giveawaySources.join(',')}),source_type.eq.social,category.eq.giveaways`);
 
@@ -69,16 +72,28 @@ const updates = [];
 const counts = {};
 
 for (const opportunity of data ?? []) {
-  const subcategory = classifyRewardType(opportunity);
+  const classification = await classifyRewardTypeWithAi(opportunity, { env });
+  const { subcategory } = classification;
   const tags = normalizeGeneratedRewardTag(opportunity, subcategory);
   counts[subcategory] = (counts[subcategory] ?? 0) + 1;
 
   if (
     opportunity.category !== 'giveaways' ||
     opportunity.subcategory !== subcategory ||
+    opportunity.classification_method !== classification.classification_method ||
+    opportunity.classification_confidence !== classification.classification_confidence ||
+    opportunity.classification_reason !== classification.classification_reason ||
+    opportunity.needs_review !== classification.needs_review ||
     tagsChanged(opportunity.tags, tags)
   ) {
-    const values = { category: 'giveaways', subcategory };
+    const values = {
+      category: 'giveaways',
+      subcategory,
+      classification_method: classification.classification_method,
+      classification_confidence: classification.classification_confidence,
+      classification_reason: classification.classification_reason,
+      needs_review: classification.needs_review,
+    };
     if (Array.isArray(tags)) values.tags = tags;
     updates.push({
       id: opportunity.id,

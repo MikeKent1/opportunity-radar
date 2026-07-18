@@ -183,6 +183,11 @@ Recent data quality work:
 
 - Expired active opportunities cleanup is available and has been run.
 - Reward categorization audit was added.
+- AI-assisted reward classification was added for ambiguous web/social giveaways.
+  - Rules still run first for speed and predictable high-confidence cases.
+  - If `OPENAI_API_KEY` is configured, ambiguous rewards can be classified by AI.
+  - The pipeline stores `classification_method`, `classification_confidence`,
+    `classification_reason`, and `needs_review` on opportunities.
 - Reward backfill now cleans stale generated reward tags for web/social imports.
 - The classifier no longer lets old `subcategory` values bias new classification.
 - Travel/gift-card/cash edge cases were tightened.
@@ -197,7 +202,7 @@ Latest checked results:
 ```txt
 npx tsc --noEmit -> passed
 npx expo-doctor -> 21/21 passed
-npm run rewards:audit -> 458 audited, 0 flagged
+npm run rewards:audit -> 458 audited, 0 high flagged, 5 medium review candidates
 npm run pipeline:health -> expiredActive: 0
 ```
 
@@ -228,6 +233,15 @@ The app reads only public Supabase variables through `EXPO_PUBLIC_*`.
 Server-side secrets are used by scripts, GitHub Actions, Supabase secrets, or local
 `.env` during maintenance.
 
+Optional AI classifier secrets:
+
+```bash
+OPENAI_API_KEY=...
+OPENAI_CLASSIFIER_MODEL=gpt-5.6-mini
+AI_REWARD_CLASSIFIER_ENABLED=true
+AI_REWARD_CLASSIFIER_MODE=uncertain
+```
+
 ## GitHub / Deployment
 
 Recent important commits:
@@ -247,6 +261,7 @@ The Vercel project deploys from the GitHub repo using the `site/` root directory
 - `src/services/auth.ts` - Google sign-in and sign-out
 - `src/utils/displayText.ts` - display text cleanup
 - `scripts/lib/reward-classifier.mjs` - giveaway reward classifier
+- `scripts/lib/ai-reward-classifier.mjs` - optional AI-assisted reward classifier
 - `scripts/audit-giveaway-categorization.mjs` - reward categorization audit
 - `scripts/close-expired-opportunities.mjs` - closes expired active opportunities
 - `scripts/pipeline-health.mjs` - source and data health summary
