@@ -23,10 +23,17 @@ const setting = (key) => {
 
 const supabaseUrl = setting('EXPO_PUBLIC_SUPABASE_URL');
 const serviceRoleKey = setting('SUPABASE_SERVICE_ROLE_KEY');
-const feedUrls = (setting('RSS_FEED_URLS') ?? '')
+
+const defaultFeedUrls = [
+  'https://www.epicbundle.com/feed/',
+  'https://www.gamerpower.com/rss/games',
+  'https://www.gamerpower.com/rss/loot',
+];
+const configuredFeedUrls = (setting('RSS_FEED_URLS') ?? '')
   .split(/[\n,]+/)
   .map((url) => url.trim())
   .filter(Boolean);
+const feedUrls = configuredFeedUrls.length ? configuredFeedUrls : defaultFeedUrls;
 
 const keywords = (setting('RSS_KEYWORDS') ?? '')
   .split(',')
@@ -60,6 +67,10 @@ const text = (value) => {
     .replace(/<[^>]*>/g, ' ')
     .replace(/&nbsp;/g, ' ')
     .replace(/&amp;/g, '&')
+    .replace(/&middot;/g, ' - ')
+    .replace(/&bull;/g, ' - ')
+    .replace(/&ndash;/g, '-')
+    .replace(/&mdash;/g, '-')
     .replace(/\s+/g, ' ')
     .trim();
 };
@@ -104,6 +115,7 @@ const matchesKeywords = (item) => {
 };
 
 const opportunities = [];
+const feedErrors = [];
 
 for (const feedUrl of feedUrls) {
   const response = await fetch(feedUrl, {
@@ -114,7 +126,9 @@ for (const feedUrl of feedUrls) {
   });
 
   if (!response.ok) {
-    console.warn(`RSS feed failed ${feedUrl}: ${response.status}`);
+    const message = `RSS feed failed ${feedUrl}: ${response.status}`;
+    feedErrors.push(message);
+    console.warn(message);
     continue;
   }
 
@@ -183,4 +197,12 @@ if (deduped.length > 0) {
   if (upsertError) throw upsertError;
 }
 
-console.log(JSON.stringify({ imported: deduped.length, providers: ['rss'] }));
+console.log(
+  JSON.stringify({
+    imported: deduped.length,
+    providers: ['rss'],
+    feeds: feedUrls.length,
+    defaultFeedsUsed: configuredFeedUrls.length === 0,
+    skipped: feedErrors.length ? feedErrors.slice(0, 3).join(' | ') : '',
+  }),
+);

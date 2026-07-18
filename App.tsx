@@ -5,7 +5,9 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Image,
   Linking,
+  Modal,
   Platform,
   Pressable,
   RefreshControl,
@@ -24,13 +26,29 @@ import { isSupabaseConfigured, supabase } from './src/lib/supabase';
 import { signInWithGoogle, signOut } from './src/services/auth';
 import { Opportunity, OpportunitySource } from './src/types';
 import {
+  loadSavedOpportunityIds,
   loadOpportunities,
+  loadOpportunityCounts,
+  OpportunityCounts,
+  saveOpportunity,
   subscribeToOpportunities,
+  unsaveOpportunity,
 } from './src/services/opportunities';
+import { cleanDisplayText } from './src/utils/displayText';
+
+const prizenAppIcon = require('./assets/prizen-icon.png');
+const prizenMark = require('./assets/prizen-mark-transparent.png');
+const OPPORTUNITY_PAGE_SIZE = 15;
+const legalLinks = [
+  { label: 'Privacy Policy', url: 'https://prizen.app/privacy' },
+  { label: 'Terms of Service', url: 'https://prizen.app/terms' },
+  { label: 'Support', url: 'https://prizen.app/support' },
+  { label: 'Delete account', url: 'https://prizen.app/delete-account' },
+];
 
 type Filter =
   | 'all'
-  | 'settings'
+  | 'saved'
   | 'giveaways'
   | 'freetoplay'
   | 'launches'
@@ -40,48 +58,115 @@ type Filter =
   | 'grants'
   | 'tenders';
 
-type GiveawayRewardFilter =
-  | 'all'
-  | 'game'
-  | 'dlc'
-  | 'in_game_item'
-  | 'gift_card'
-  | 'hardware'
-  | 'cash'
-  | 'trip'
-  | 'software'
-  | 'other';
-
 type PreparedOpportunity = Opportunity & {
   isGiveaway: boolean;
   searchText: string;
 };
 
+type SecondaryFilter = {
+  id: string;
+  label: string;
+};
+
+const initialOpportunityCounts: OpportunityCounts = {
+  all: 0,
+  giveaways: 0,
+  freetoplay: 0,
+  launches: 0,
+  competitions: 0,
+  feeds: 0,
+  community: 0,
+  grants: 0,
+  tenders: 0,
+};
+
 const filters: { id: Filter; label: string }[] = [
-  { id: 'all', label: 'Όλα' },
-  { id: 'settings', label: 'Settings' },
   { id: 'giveaways', label: 'Giveaways' },
   { id: 'freetoplay', label: 'Free to Play' },
-  { id: 'launches', label: 'Launches' },
   { id: 'competitions', label: 'Competitions' },
-  { id: 'feeds', label: 'Feeds' },
-  { id: 'community', label: 'Community' },
   { id: 'grants', label: 'Grants' },
   { id: 'tenders', label: 'Tenders' },
+  { id: 'launches', label: 'Launches' },
+  { id: 'feeds', label: 'Feeds' },
+  { id: 'community', label: 'Community' },
+  { id: 'saved', label: 'Saved' },
+  { id: 'all', label: 'All' },
 ];
 
-const giveawayRewardFilters: { id: GiveawayRewardFilter; label: string }[] = [
-  { id: 'all', label: 'All' },
-  { id: 'game', label: 'Games' },
-  { id: 'dlc', label: 'DLC' },
-  { id: 'in_game_item', label: 'In-game' },
-  { id: 'gift_card', label: 'Gift cards' },
-  { id: 'hardware', label: 'Hardware' },
-  { id: 'cash', label: 'Cash' },
-  { id: 'trip', label: 'Trips' },
-  { id: 'software', label: 'Software' },
-  { id: 'other', label: 'Other' },
-];
+const secondaryFilters: Partial<Record<Filter, SecondaryFilter[]>> = {
+  giveaways: [
+    { id: 'cash', label: 'Cash' },
+    { id: 'trip', label: 'Trips' },
+    { id: 'gift_card', label: 'Gift cards' },
+    { id: 'hardware', label: 'Hardware' },
+    { id: 'game', label: 'Games' },
+    { id: 'software', label: 'Software' },
+    { id: 'in_game_item', label: 'In-game' },
+    { id: 'dlc', label: 'DLC' },
+    { id: 'other', label: 'Other' },
+    { id: 'all', label: 'All' },
+  ],
+  freetoplay: [
+    { id: 'mmorpg', label: 'MMORPG' },
+    { id: 'shooter', label: 'Shooter' },
+    { id: 'strategy', label: 'Strategy' },
+    { id: 'card', label: 'Card Games' },
+    { id: 'moba', label: 'MOBA' },
+    { id: 'battle_royale', label: 'Battle Royale' },
+    { id: 'sports', label: 'Sports' },
+    { id: 'browser', label: 'Browser' },
+    { id: 'all', label: 'All' },
+  ],
+  competitions: [
+    { id: 'cash_prize', label: 'Cash Prize' },
+    { id: 'featured', label: 'Featured' },
+    { id: 'getting_started', label: 'Getting Started' },
+    { id: 'knowledge', label: 'Knowledge' },
+    { id: 'playground', label: 'Playground' },
+    { id: 'swag', label: 'Swag' },
+    { id: 'all', label: 'All' },
+  ],
+  grants: [
+    { id: 'high_value', label: 'High Value' },
+    { id: 'health', label: 'Health' },
+    { id: 'social_services', label: 'Social Services' },
+    { id: 'research', label: 'Research' },
+    { id: 'education', label: 'Education' },
+    { id: 'business', label: 'Business' },
+    { id: 'environment', label: 'Environment' },
+    { id: 'eu_grants', label: 'EU Grants' },
+    { id: 'all', label: 'All' },
+  ],
+  tenders: [
+    { id: 'high_value', label: 'High Value' },
+    { id: 'closing_soon', label: 'Closing Soon' },
+    { id: 'norway', label: 'Norway' },
+    { id: 'sweden', label: 'Sweden' },
+    { id: 'netherlands', label: 'Netherlands' },
+    { id: 'finland', label: 'Finland' },
+    { id: 'france', label: 'France' },
+    { id: 'all', label: 'All' },
+  ],
+  launches: [
+    { id: 'ai', label: 'AI' },
+    { id: 'productivity', label: 'Productivity' },
+    { id: 'developer_tools', label: 'Developer Tools' },
+    { id: 'saas', label: 'SaaS' },
+    { id: 'writing', label: 'Writing' },
+    { id: 'games', label: 'Games' },
+    { id: 'social', label: 'Social' },
+    { id: 'all', label: 'All' },
+  ],
+};
+
+const initialSecondaryFilters: Record<string, string> = {
+  giveaways: 'cash',
+  freetoplay: 'mmorpg',
+  competitions: 'cash_prize',
+  grants: 'high_value',
+  tenders: 'high_value',
+  launches: 'ai',
+};
 
 function isGiveawayOpportunity(opportunity: Opportunity) {
   return (
@@ -91,14 +176,190 @@ function isGiveawayOpportunity(opportunity: Opportunity) {
   );
 }
 
+function formatDetailDate(value: string | null | undefined) {
+  if (!value) return 'Not set';
+  return new Date(value).toLocaleDateString('en-US', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+function getOpportunityActionUrl(opportunity: Opportunity) {
+  return opportunity.participation_url || opportunity.url;
+}
+
+function getRewardLabel(opportunity: Opportunity) {
+  if (opportunity.subcategory) {
+    return (
+      {
+        cash: 'Cash',
+        dlc: 'DLC',
+        game: 'Game',
+        gift_card: 'Gift card',
+        hardware: 'Hardware',
+        in_game_item: 'In-game item',
+        other: 'Other',
+        software: 'Software',
+        trip: 'Trip',
+      }[opportunity.subcategory] ?? opportunity.subcategory.replace(/_/g, ' ')
+    );
+  }
+  if (opportunity.amount) {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: opportunity.currency,
+      maximumFractionDigits: 0,
+    }).format(opportunity.amount);
+  }
+  return opportunity.category ?? 'opportunity';
+}
+
+function getProfileName(session: Session) {
+  const metadata = session.user.user_metadata;
+  return (
+    metadata.full_name ||
+    metadata.name ||
+    metadata.preferred_username ||
+    session.user.email?.split('@')[0] ||
+    'Prizen user'
+  );
+}
+
+function getProfileAvatarUrl(session: Session) {
+  const metadata = session.user.user_metadata;
+  return metadata.avatar_url || metadata.picture || null;
+}
+
+function getProfileInitials(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('');
+}
+
+function getProfileProvider(session: Session) {
+  return session.user.app_metadata.provider || session.user.identities?.[0]?.provider || 'google';
+}
+
+function getDeadlineTimestamp(value: string | null | undefined) {
+  if (!value) return Number.POSITIVE_INFINITY;
+  const timestamp = new Date(value).getTime();
+  return Number.isFinite(timestamp) ? timestamp : Number.POSITIVE_INFINITY;
+}
+
+function sortCashGiveaways(opportunities: PreparedOpportunity[]) {
+  return [...opportunities].sort((left, right) => {
+    const leftAmount = left.amount ?? null;
+    const rightAmount = right.amount ?? null;
+
+    if (leftAmount !== null || rightAmount !== null) {
+      if (leftAmount === null) return 1;
+      if (rightAmount === null) return -1;
+      if (rightAmount !== leftAmount) return rightAmount - leftAmount;
+    }
+
+    const deadlineDiff = getDeadlineTimestamp(left.deadline) - getDeadlineTimestamp(right.deadline);
+    if (deadlineDiff !== 0) return deadlineDiff;
+
+    return getDeadlineTimestamp(right.published_at) - getDeadlineTimestamp(left.published_at);
+  });
+}
+
+function hasTag(opportunity: Opportunity, tag: string) {
+  return opportunity.tags.some((item) => item.toLocaleLowerCase('en') === tag.toLocaleLowerCase('en'));
+}
+
+function hasTagIncluding(opportunity: Opportunity, value: string) {
+  const normalizedValue = value.toLocaleLowerCase('en');
+  return opportunity.tags.some((item) => item.toLocaleLowerCase('en').includes(normalizedValue));
+}
+
+function isClosingSoon(opportunity: Opportunity, days = 30) {
+  const timestamp = getDeadlineTimestamp(opportunity.deadline);
+  if (!Number.isFinite(timestamp)) return false;
+  const now = Date.now();
+  return timestamp >= now && timestamp <= now + days * 86_400_000;
+}
+
+function matchesSecondaryFilter(
+  opportunity: PreparedOpportunity,
+  filter: Filter,
+  secondaryFilter: string,
+) {
+  if (secondaryFilter === 'all') return true;
+
+  if (filter === 'giveaways') {
+    return (opportunity.subcategory ?? 'other') === secondaryFilter;
+  }
+
+  if (filter === 'freetoplay') {
+    if (secondaryFilter === 'mmorpg') return hasTag(opportunity, 'MMORPG');
+    if (secondaryFilter === 'shooter') return hasTag(opportunity, 'Shooter');
+    if (secondaryFilter === 'strategy') return hasTag(opportunity, 'Strategy');
+    if (secondaryFilter === 'card') return hasTag(opportunity, 'Card Game');
+    if (secondaryFilter === 'moba') return hasTag(opportunity, 'MOBA');
+    if (secondaryFilter === 'battle_royale') return hasTag(opportunity, 'Battle Royale');
+    if (secondaryFilter === 'sports') return hasTag(opportunity, 'Sports');
+    if (secondaryFilter === 'browser') return hasTagIncluding(opportunity, 'Web Browser');
+  }
+
+  if (filter === 'competitions') {
+    if (secondaryFilter === 'cash_prize') return Boolean(opportunity.amount && opportunity.amount > 0);
+    if (secondaryFilter === 'featured') return hasTag(opportunity, 'Featured');
+    if (secondaryFilter === 'getting_started') return hasTag(opportunity, 'Getting Started');
+    if (secondaryFilter === 'knowledge') return hasTag(opportunity, 'Knowledge');
+    if (secondaryFilter === 'playground') return hasTag(opportunity, 'Playground');
+    if (secondaryFilter === 'swag') return hasTag(opportunity, 'Swag');
+  }
+
+  if (filter === 'grants') {
+    if (secondaryFilter === 'high_value') return Boolean(opportunity.amount && opportunity.amount >= 500_000);
+    if (secondaryFilter === 'health') return hasTag(opportunity, 'Health');
+    if (secondaryFilter === 'social_services') {
+      return hasTag(opportunity, 'Income Security And Social Services');
+    }
+    if (secondaryFilter === 'research') {
+      return hasTag(opportunity, 'Science Technology And Other Research And Development');
+    }
+    if (secondaryFilter === 'education') return hasTag(opportunity, 'Education');
+    if (secondaryFilter === 'business') return hasTag(opportunity, 'Business And Commerce');
+    if (secondaryFilter === 'environment') return hasTag(opportunity, 'Environment');
+    if (secondaryFilter === 'eu_grants') return opportunity.source === 'eufunding';
+  }
+
+  if (filter === 'tenders') {
+    if (secondaryFilter === 'high_value') return Boolean(opportunity.amount && opportunity.amount >= 10_000_000);
+    if (secondaryFilter === 'closing_soon') return isClosingSoon(opportunity);
+    if (secondaryFilter === 'norway') return hasTag(opportunity, 'NOR');
+    if (secondaryFilter === 'sweden') return hasTag(opportunity, 'SWE');
+    if (secondaryFilter === 'netherlands') return hasTag(opportunity, 'NLD');
+    if (secondaryFilter === 'finland') return hasTag(opportunity, 'FIN');
+    if (secondaryFilter === 'france') return hasTag(opportunity, 'FRA');
+  }
+
+  if (filter === 'launches') {
+    if (secondaryFilter === 'ai') return hasTag(opportunity, 'Artificial Intelligence');
+    if (secondaryFilter === 'productivity') return hasTag(opportunity, 'Productivity');
+    if (secondaryFilter === 'developer_tools') return hasTag(opportunity, 'Developer Tools');
+    if (secondaryFilter === 'saas') return hasTag(opportunity, 'SaaS');
+    if (secondaryFilter === 'writing') return hasTag(opportunity, 'Writing');
+    if (secondaryFilter === 'games') return hasTag(opportunity, 'Games');
+    if (secondaryFilter === 'social') return hasTag(opportunity, 'Social Media');
+  }
+
+  return true;
+}
+
 export default function App() {
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
-  const [filter, setFilter] = useState<Filter>('all');
-  const [giveawayRewardFilter, setGiveawayRewardFilter] =
-    useState<GiveawayRewardFilter>('all');
+  const [filter, setFilter] = useState<Filter>('giveaways');
+  const [activeSecondaryFilters, setActiveSecondaryFilters] =
+    useState<Record<string, string>>(initialSecondaryFilters);
   const [query, setQuery] = useState('');
-  const deferredFilter = useDeferredValue(filter);
-  const deferredGiveawayRewardFilter = useDeferredValue(giveawayRewardFilter);
+  const activeSecondaryFilter = activeSecondaryFilters[filter] ?? 'all';
   const deferredQuery = useDeferredValue(query);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -106,6 +367,14 @@ export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
+  const [savedOpportunityIds, setSavedOpportunityIds] = useState<Set<string>>(new Set());
+  const [savingOpportunityIds, setSavingOpportunityIds] = useState<Set<string>>(new Set());
+  const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
+  const [profileVisible, setProfileVisible] = useState(false);
+  const [searchVisible, setSearchVisible] = useState(false);
+  const [visibleLimit, setVisibleLimit] = useState(OPPORTUNITY_PAGE_SIZE);
+  const [opportunityCounts, setOpportunityCounts] =
+    useState<OpportunityCounts>(initialOpportunityCounts);
 
   const fetchOpportunities = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -113,15 +382,41 @@ export default function App() {
     const result = await loadOpportunities();
     setOpportunities(result.data);
     setNotice(result.notice);
+    void loadOpportunityCounts().then((countsResult) => {
+      if (countsResult.error) {
+        console.warn('Supabase opportunity counts query failed:', countsResult.error);
+        return;
+      }
+      setOpportunityCounts(countsResult.data);
+    });
     setLoading(false);
     setRefreshing(false);
   }, []);
+
+  const fetchSavedOpportunities = useCallback(async () => {
+    if (!session) {
+      setSavedOpportunityIds(new Set());
+      return;
+    }
+
+    const result = await loadSavedOpportunityIds();
+    if (result.error) {
+      console.warn('Supabase saved opportunities query failed:', result.error);
+      return;
+    }
+
+    setSavedOpportunityIds(result.data);
+  }, [session]);
 
   useEffect(() => {
     void fetchOpportunities();
     const unsubscribe = subscribeToOpportunities(() => fetchOpportunities(true));
     return unsubscribe;
   }, [fetchOpportunities]);
+
+  useEffect(() => {
+    void fetchSavedOpportunities();
+  }, [fetchSavedOpportunities]);
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
@@ -161,8 +456,63 @@ export default function App() {
 
     if (!result.ok) {
       Alert.alert('Sign out failed', result.message);
+    } else {
+      setProfileVisible(false);
     }
   };
+
+  const handleToggleSave = useCallback(
+    async (opportunityId: string) => {
+      if (!session || savingOpportunityIds.has(opportunityId)) return;
+
+      const wasSaved = savedOpportunityIds.has(opportunityId);
+      setSavingOpportunityIds((current) => new Set(current).add(opportunityId));
+      setSavedOpportunityIds((current) => {
+        const next = new Set(current);
+        if (wasSaved) {
+          next.delete(opportunityId);
+        } else {
+          next.add(opportunityId);
+        }
+        return next;
+      });
+
+      const result = wasSaved
+        ? await unsaveOpportunity(opportunityId)
+        : await saveOpportunity(opportunityId);
+
+      setSavingOpportunityIds((current) => {
+        const next = new Set(current);
+        next.delete(opportunityId);
+        return next;
+      });
+
+      if (!result.ok) {
+        setSavedOpportunityIds((current) => {
+          const next = new Set(current);
+          if (wasSaved) {
+            next.add(opportunityId);
+          } else {
+            next.delete(opportunityId);
+          }
+          return next;
+        });
+        Alert.alert('Saved update failed', result.message);
+      }
+    },
+    [savedOpportunityIds, savingOpportunityIds, session],
+  );
+
+  const handleOpenOpportunity = useCallback((opportunity: Opportunity) => {
+    void Linking.openURL(getOpportunityActionUrl(opportunity)).catch(() => {
+      Alert.alert('Could not open link', 'Please try again in a moment.');
+    });
+  }, []);
+  const handleOpenUrl = useCallback((url: string) => {
+    void Linking.openURL(url).catch(() => {
+      Alert.alert('Could not open link', 'Please try again in a moment.');
+    });
+  }, []);
 
   const preparedOpportunities = useMemo<PreparedOpportunity[]>(
     () =>
@@ -177,46 +527,120 @@ export default function App() {
     [opportunities],
   );
 
-  const fundingCount = useMemo(
-    () =>
-      opportunities.filter((item) => item.source === 'grants' || item.source === 'eufunding')
-        .length,
-    [opportunities],
+  const filterCounts = useMemo<Record<Filter, number>>(
+    () => ({
+      all: opportunityCounts.all || preparedOpportunities.length,
+      saved: savedOpportunityIds.size,
+      giveaways:
+        opportunityCounts.giveaways || preparedOpportunities.filter((item) => item.isGiveaway).length,
+      freetoplay:
+        opportunityCounts.freetoplay ||
+        preparedOpportunities.filter((item) => item.source === 'freetogame').length,
+      launches:
+        opportunityCounts.launches ||
+        preparedOpportunities.filter((item) => item.source === 'producthunt').length,
+      competitions:
+        opportunityCounts.competitions ||
+        preparedOpportunities.filter((item) => item.source === 'kaggle').length,
+      feeds:
+        opportunityCounts.feeds ||
+        preparedOpportunities.filter((item) => item.source === 'rss').length,
+      community:
+        opportunityCounts.community ||
+        preparedOpportunities.filter((item) => item.source === 'reddit').length,
+      grants:
+        opportunityCounts.grants ||
+        preparedOpportunities.filter(
+          (item) => item.source === 'grants' || item.source === 'eufunding',
+        ).length,
+      tenders:
+        opportunityCounts.tenders ||
+        preparedOpportunities.filter((item) => item.source === 'ted').length,
+    }),
+    [opportunityCounts, preparedOpportunities, savedOpportunityIds.size],
   );
+  const profileName = session ? getProfileName(session) : '';
+  const profileAvatarUrl = session ? getProfileAvatarUrl(session) : null;
+  const profileProvider = session ? getProfileProvider(session) : 'google';
+  const profileInitials = getProfileInitials(profileName);
+
+  const activeFilterLabel = filters.find((item) => item.id === filter)?.label ?? 'Opportunities';
+  const hasQuery = query.trim().length > 0;
+  const sectionTitle = filter === 'saved' ? 'Saved opportunities' : 'Latest opportunities';
+  const emptyTitle =
+    filter === 'saved'
+      ? 'No saved opportunities yet'
+      : hasQuery
+        ? 'No matches found'
+        : `${activeFilterLabel} is empty`;
+  const emptyMessage =
+    filter === 'saved'
+      ? 'Tap the star on any opportunity to keep it here.'
+      : hasQuery
+        ? 'Try a shorter search or switch filters.'
+        : 'Pull to refresh or switch to another tab.';
+
+  useEffect(() => {
+    setVisibleLimit(OPPORTUNITY_PAGE_SIZE);
+  }, [filter, activeSecondaryFilter, deferredQuery]);
 
   const visibleOpportunities = useMemo(() => {
-    if (deferredFilter === 'settings') return [];
-
     const normalizedQuery = deferredQuery.trim().toLocaleLowerCase('el');
 
-    return preparedOpportunities.filter((opportunity) => {
+    const filtered = preparedOpportunities.filter((opportunity) => {
       const matchesFilter =
-        deferredFilter === 'all' ||
-        opportunity.source === deferredFilter ||
-        (deferredFilter === 'tenders' && opportunity.source === 'ted') ||
-        (deferredFilter === 'launches' && opportunity.source === 'producthunt') ||
-        (deferredFilter === 'competitions' && opportunity.source === 'kaggle') ||
-        (deferredFilter === 'feeds' && opportunity.source === 'rss') ||
-        (deferredFilter === 'community' && opportunity.source === 'reddit') ||
-        (deferredFilter === 'grants' &&
+        filter === 'all' ||
+        (filter === 'saved' && savedOpportunityIds.has(opportunity.id)) ||
+        opportunity.source === filter ||
+        (filter === 'tenders' && opportunity.source === 'ted') ||
+        (filter === 'launches' && opportunity.source === 'producthunt') ||
+        (filter === 'competitions' && opportunity.source === 'kaggle') ||
+        (filter === 'feeds' && opportunity.source === 'rss') ||
+        (filter === 'community' && opportunity.source === 'reddit') ||
+        (filter === 'grants' &&
           (opportunity.source === 'grants' || opportunity.source === 'eufunding')) ||
-        (deferredFilter === 'freetoplay' && opportunity.source === 'freetogame') ||
-        (deferredFilter === 'giveaways' && opportunity.isGiveaway);
-      const matchesGiveawayReward =
-        deferredFilter !== 'giveaways' ||
-        deferredGiveawayRewardFilter === 'all' ||
-        (opportunity.subcategory ?? 'other') === deferredGiveawayRewardFilter;
+        (filter === 'freetoplay' && opportunity.source === 'freetogame') ||
+        (filter === 'giveaways' && opportunity.isGiveaway);
+      const matchesSecondary =
+        !secondaryFilters[filter] ||
+        matchesSecondaryFilter(opportunity, filter, activeSecondaryFilter);
       return (
         matchesFilter &&
-        matchesGiveawayReward &&
+        matchesSecondary &&
         (!normalizedQuery || opportunity.searchText.includes(normalizedQuery))
       );
     });
-  }, [deferredFilter, deferredGiveawayRewardFilter, deferredQuery, preparedOpportunities]);
+
+    if (filter === 'giveaways' && activeSecondaryFilter === 'cash') {
+      return sortCashGiveaways(filtered);
+    }
+
+    return filtered;
+  }, [
+    filter,
+    activeSecondaryFilter,
+    deferredQuery,
+    preparedOpportunities,
+    savedOpportunityIds,
+  ]);
+  const pagedOpportunities = useMemo(
+    () => visibleOpportunities.slice(0, visibleLimit),
+    [visibleLimit, visibleOpportunities],
+  );
+  const hasMoreOpportunities = pagedOpportunities.length < visibleOpportunities.length;
 
   const renderOpportunity = useCallback(
-    ({ item }: { item: Opportunity }) => <OpportunityCard opportunity={item} />,
-    [],
+    ({ item }: { item: Opportunity }) => (
+      <OpportunityCard
+        opportunity={item}
+        isSaved={savedOpportunityIds.has(item.id)}
+        isSaving={savingOpportunityIds.has(item.id)}
+        onToggleSave={() => handleToggleSave(item.id)}
+        onPress={() => setSelectedOpportunity(item)}
+        onOpenExternal={() => handleOpenOpportunity(item)}
+      />
+    ),
+    [handleOpenOpportunity, handleToggleSave, savedOpportunityIds, savingOpportunityIds],
   );
 
   if (!authReady) {
@@ -239,6 +663,12 @@ export default function App() {
           <StatusBar style="light" />
           <View style={styles.loginScreen}>
             <View style={styles.loginHeader}>
+              <Image
+                accessibilityIgnoresInvertColors
+                resizeMode="contain"
+                source={prizenAppIcon}
+                style={styles.loginLogo}
+              />
               <Text style={styles.loginTitle}>PRIZEN</Text>
               <Text style={styles.loginSubtitle}>Sign in to track and save opportunities.</Text>
             </View>
@@ -272,8 +702,222 @@ export default function App() {
       <SafeAreaView style={styles.safeArea}>
         <StatusBar style="light" />
 
+        <Modal
+          animationType="fade"
+          transparent
+          visible={profileVisible}
+          onRequestClose={() => setProfileVisible(false)}
+        >
+          <View style={styles.profileOverlay}>
+            <Pressable style={styles.profileBackdrop} onPress={() => setProfileVisible(false)} />
+            <View style={styles.profileSheet}>
+              <View style={styles.profileSheetTop}>
+                <Text style={styles.profileSheetTitle}>Profile</Text>
+                <Pressable
+                  accessibilityLabel="Close profile"
+                  accessibilityRole="button"
+                  hitSlop={10}
+                  onPress={() => setProfileVisible(false)}
+                  style={styles.detailCloseButton}
+                >
+                  <Text style={styles.detailCloseText}>×</Text>
+                </Pressable>
+              </View>
+              <View style={styles.settingsPanel}>
+                <View style={styles.profileHeader}>
+                  <View style={styles.profileAvatar}>
+                    {profileAvatarUrl ? (
+                      <Image
+                        source={{ uri: profileAvatarUrl }}
+                        resizeMode="cover"
+                        accessibilityLabel={profileName}
+                        style={styles.profileAvatarImage}
+                      />
+                    ) : (
+                      <Text style={styles.profileAvatarText}>{profileInitials || 'P'}</Text>
+                    )}
+                  </View>
+                  <View style={styles.profileCopy}>
+                    <Text style={styles.settingsTitle}>{profileName}</Text>
+                    <Text style={styles.settingsEmail}>{session.user.email ?? 'Google account'}</Text>
+                    <View style={styles.providerBadge}>
+                      <Text style={styles.providerBadgeText}>{profileProvider.toUpperCase()} LOGIN</Text>
+                    </View>
+                  </View>
+                </View>
+                <View style={styles.settingsStats}>
+                  <View style={styles.settingsStat}>
+                    <Text style={styles.settingsStatValue}>{savedOpportunityIds.size}</Text>
+                    <Text style={styles.settingsStatLabel}>Saved</Text>
+                  </View>
+                  <View style={styles.settingsStat}>
+                    <Text style={styles.settingsStatValue}>{opportunities.length}</Text>
+                    <Text style={styles.settingsStatLabel}>Active</Text>
+                  </View>
+                </View>
+                <View style={styles.profileMeta}>
+                  <Text style={styles.settingsLabel}>User ID</Text>
+                  <Text numberOfLines={1} style={styles.profileMetaValue}>
+                    {session.user.id}
+                  </Text>
+                  <Text style={styles.settingsLabel}>Member since</Text>
+                  <Text style={styles.profileMetaValue}>
+                    {formatDetailDate(session.user.created_at)}
+                  </Text>
+                </View>
+                <View style={styles.legalLinks}>
+                  {legalLinks.map((item) => (
+                    <Pressable
+                      key={item.url}
+                      accessibilityLabel={`Open ${item.label}`}
+                      accessibilityRole="link"
+                      onPress={() => handleOpenUrl(item.url)}
+                      style={({ pressed }) => [
+                        styles.legalLinkButton,
+                        pressed && styles.profileButtonPressed,
+                      ]}
+                    >
+                      <Text style={styles.legalLinkText}>{item.label}</Text>
+                      <Text style={styles.legalLinkArrow}>↗</Text>
+                    </Pressable>
+                  ))}
+                </View>
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={authLoading}
+                  onPress={handleSignOut}
+                  style={({ pressed }) => [
+                    styles.logoutButton,
+                    pressed && styles.authButtonPressed,
+                    authLoading && styles.authButtonDisabled,
+                  ]}
+                >
+                  {authLoading ? (
+                    <ActivityIndicator size="small" color="#071A1C" />
+                  ) : (
+                    <Text style={styles.logoutButtonText}>Sign out</Text>
+                  )}
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        <Modal
+          animationType="slide"
+          transparent
+          visible={Boolean(selectedOpportunity)}
+          onRequestClose={() => setSelectedOpportunity(null)}
+        >
+          <View style={styles.detailOverlay}>
+            <View style={styles.detailSheet}>
+              {selectedOpportunity && (
+                <ScrollView showsVerticalScrollIndicator={false}>
+                  <View style={styles.detailHeader}>
+                    <View style={styles.detailHeaderText}>
+                      <Text style={styles.detailSource}>
+                        {selectedOpportunity.source_type === 'social'
+                          ? `INSTAGRAM @${selectedOpportunity.source}`.toUpperCase()
+                          : selectedOpportunity.source.toUpperCase()}
+                      </Text>
+                      <Text style={styles.detailTitle}>{cleanDisplayText(selectedOpportunity.title)}</Text>
+                      <Text style={styles.detailOrg}>{selectedOpportunity.organization}</Text>
+                    </View>
+                    <Pressable
+                      accessibilityLabel="Close details"
+                      accessibilityRole="button"
+                      hitSlop={10}
+                      onPress={() => setSelectedOpportunity(null)}
+                      style={styles.detailCloseButton}
+                    >
+                      <Text style={styles.detailCloseText}>×</Text>
+                    </Pressable>
+                  </View>
+
+                  {selectedOpportunity.image_url && (
+                    <Image
+                      source={{ uri: selectedOpportunity.image_url }}
+                      resizeMode="cover"
+                      accessibilityLabel={selectedOpportunity.title}
+                      style={styles.detailImage}
+                    />
+                  )}
+
+                  <View style={styles.detailStats}>
+                    <View style={styles.detailStat}>
+                      <Text style={styles.detailStatLabel}>Deadline</Text>
+                      <Text style={styles.detailStatValue}>
+                        {formatDetailDate(selectedOpportunity.deadline)}
+                      </Text>
+                    </View>
+                    <View style={styles.detailStat}>
+                      <Text style={styles.detailStatLabel}>Reward</Text>
+                      <Text style={styles.detailStatValue}>{getRewardLabel(selectedOpportunity)}</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.detailSection}>
+                    <Text style={styles.detailSectionTitle}>Summary</Text>
+                    <Text style={styles.detailBody}>{cleanDisplayText(selectedOpportunity.summary)}</Text>
+                  </View>
+
+                  {selectedOpportunity.participation_steps?.length ? (
+                    <View style={styles.detailSection}>
+                      <Text style={styles.detailSectionTitle}>How to enter</Text>
+                      {selectedOpportunity.participation_steps.map((step, index) => (
+                        <View key={`${step}-${index}`} style={styles.detailStep}>
+                          <Text style={styles.detailStepIndex}>{index + 1}</Text>
+                          <Text style={styles.detailStepText}>{step}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  ) : null}
+
+                  {selectedOpportunity.tags.length > 0 && (
+                    <View style={styles.detailTagList}>
+                      {selectedOpportunity.tags.slice(0, 8).map((tag) => (
+                        <View key={tag} style={styles.detailTag}>
+                          <Text style={styles.detailTagText}>{tag}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+
+                  <View style={styles.detailActions}>
+                    <Pressable
+                      accessibilityRole="button"
+                      disabled={savingOpportunityIds.has(selectedOpportunity.id)}
+                      onPress={() => handleToggleSave(selectedOpportunity.id)}
+                      style={[
+                        styles.detailSecondaryButton,
+                        savedOpportunityIds.has(selectedOpportunity.id) && styles.detailSecondaryButtonActive,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.detailSecondaryText,
+                          savedOpportunityIds.has(selectedOpportunity.id) && styles.detailSecondaryTextActive,
+                        ]}
+                      >
+                        {savedOpportunityIds.has(selectedOpportunity.id) ? 'Saved' : 'Save'}
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      accessibilityRole="link"
+                      onPress={() => handleOpenOpportunity(selectedOpportunity)}
+                      style={styles.detailPrimaryButton}
+                    >
+                      <Text style={styles.detailPrimaryText}>Open link</Text>
+                    </Pressable>
+                  </View>
+                </ScrollView>
+              )}
+            </View>
+          </View>
+        </Modal>
+
         <FlatList
-          data={visibleOpportunities}
+          data={pagedOpportunities}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
@@ -288,39 +932,77 @@ export default function App() {
               tintColor="#D9FF57"
               onRefresh={() => {
                 setRefreshing(true);
-                fetchOpportunities(true);
+                void fetchOpportunities(true);
+                void fetchSavedOpportunities();
               }}
             />
           }
           ListHeaderComponent={
             <>
               <View style={styles.topBar}>
+                <Pressable
+                  accessibilityLabel="Open profile"
+                  accessibilityRole="button"
+                  onPress={() => setProfileVisible(true)}
+                  style={({ pressed }) => [styles.profileButton, pressed && styles.profileButtonPressed]}
+                >
+                  {profileAvatarUrl ? (
+                    <Image
+                      source={{ uri: profileAvatarUrl }}
+                      resizeMode="cover"
+                      accessibilityLabel={profileName}
+                      style={styles.profileButtonImage}
+                    />
+                  ) : (
+                    <Text style={styles.profileButtonText}>{profileInitials || 'P'}</Text>
+                  )}
+                </Pressable>
                 <View style={styles.topBarCopy}>
-                  <Text style={styles.eyebrow}>PRIZEN</Text>
-                  <Text style={styles.greeting}>Βρες την επόμενη ευκαιρία σου.</Text>
+                  <View style={styles.brandMarkRow}>
+                    <Image
+                      accessibilityIgnoresInvertColors
+                      resizeMode="contain"
+                      source={prizenMark}
+                      style={styles.homeLogo}
+                    />
+                    <Text style={styles.eyebrow}>PRIZEN</Text>
+                  </View>
+                  <Text style={styles.greeting}>Find your next opportunity.</Text>
                 </View>
-              </View>
-
-              <View style={styles.compactStats}>
-                <View style={styles.statChip}>
-                  <Text style={styles.statValue}>{opportunities.length}</Text>
-                  <Text style={styles.statLabel}>ενεργές</Text>
-                </View>
-                <View style={styles.statChip}>
-                  <Text style={styles.statValue}>
-                    {fundingCount}
+                <Pressable
+                  accessibilityLabel={searchVisible ? 'Close search' : 'Open search'}
+                  accessibilityRole="button"
+                  onPress={() => {
+                    setSearchVisible((current) => {
+                      if (current) setQuery('');
+                      return !current;
+                    });
+                  }}
+                  style={({ pressed }) => [
+                    styles.headerSearchButton,
+                    searchVisible && styles.headerSearchButtonActive,
+                    pressed && styles.profileButtonPressed,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.headerSearchIcon,
+                      searchVisible && styles.headerSearchIconActive,
+                    ]}
+                  >
+                    {searchVisible ? '×' : '⌕'}
                   </Text>
-                  <Text style={styles.statLabel}>χρηματοδοτήσεις</Text>
-                </View>
+                </Pressable>
               </View>
 
-              {filter !== 'settings' && (
+              {searchVisible && (
                 <View style={styles.searchBox}>
                   <Text style={styles.searchIcon}>⌕</Text>
                   <TextInput
+                    autoFocus
                     value={query}
                     onChangeText={setQuery}
-                    placeholder="Αναζήτηση ευκαιριών..."
+                    placeholder="Search by title, brand, or reward"
                     placeholderTextColor="#718082"
                     style={styles.searchInput}
                     returnKeyType="search"
@@ -340,12 +1022,29 @@ export default function App() {
               >
                 {filters.map((item) => {
                   const active = filter === item.id;
+                  const count = filterCounts[item.id];
                   return (
                     <Pressable
                       key={item.id}
-                      onPress={() => setFilter(item.id)}
+                      onPress={() => {
+                        if (filter !== item.id) {
+                          setVisibleLimit(OPPORTUNITY_PAGE_SIZE);
+                          setFilter(item.id);
+                        }
+                      }}
                       style={[styles.filterButton, active && styles.filterButtonActive]}
                     >
+                      <View style={[styles.filterCountBadge, active && styles.filterCountBadgeActive]}>
+                        <Text
+                          numberOfLines={1}
+                          style={[
+                            styles.filterCountText,
+                            active && styles.filterCountTextActive,
+                          ]}
+                        >
+                          {count}
+                        </Text>
+                      </View>
                       <Text style={[styles.filterText, active && styles.filterTextActive]}>
                         {item.label}
                       </Text>
@@ -354,18 +1053,27 @@ export default function App() {
                 })}
               </ScrollView>
 
-              {filter === 'giveaways' && (
+              {secondaryFilters[filter] && (
                 <ScrollView
                   horizontal
                   showsHorizontalScrollIndicator={false}
                   contentContainerStyle={styles.subfilters}
                 >
-                  {giveawayRewardFilters.map((item) => {
-                    const active = giveawayRewardFilter === item.id;
+                  {secondaryFilters[filter]?.map((item) => {
+                    const active = activeSecondaryFilter === item.id;
                     return (
                       <Pressable
                         key={item.id}
-                        onPress={() => setGiveawayRewardFilter(item.id)}
+                        onPress={() => {
+                          if (activeSecondaryFilter === item.id) {
+                            return;
+                          }
+                          setVisibleLimit(OPPORTUNITY_PAGE_SIZE);
+                          setActiveSecondaryFilters((current) => ({
+                            ...current,
+                            [filter]: item.id,
+                          }));
+                        }}
                         style={[styles.subfilterButton, active && styles.subfilterButtonActive]}
                       >
                         <Text
@@ -379,36 +1087,14 @@ export default function App() {
                 </ScrollView>
               )}
 
-              {filter === 'settings' ? (
-                <View style={styles.settingsPanel}>
-                  <Text style={styles.settingsTitle}>Account</Text>
-                  <Text style={styles.settingsLabel}>Signed in as</Text>
-                  <Text style={styles.settingsEmail}>{session.user.email}</Text>
-                  <Pressable
-                    accessibilityRole="button"
-                    disabled={authLoading}
-                    onPress={handleSignOut}
-                    style={({ pressed }) => [
-                      styles.logoutButton,
-                      pressed && styles.authButtonPressed,
-                      authLoading && styles.authButtonDisabled,
-                    ]}
-                  >
-                    {authLoading ? (
-                      <ActivityIndicator size="small" color="#071A1C" />
-                    ) : (
-                      <Text style={styles.logoutButtonText}>Sign out</Text>
-                    )}
-                  </Pressable>
-                </View>
-              ) : (
-                <View style={styles.sectionHeading}>
-                  <Text style={styles.sectionTitle}>Τελευταίες ευκαιρίες</Text>
-                  <Text style={styles.resultCount}>{visibleOpportunities.length} RESULTS</Text>
-                </View>
-              )}
+              <View style={styles.sectionHeading}>
+                <Text style={styles.sectionTitle}>{sectionTitle}</Text>
+                <Text style={styles.resultCount}>
+                  {pagedOpportunities.length}/{visibleOpportunities.length} RESULTS
+                </Text>
+              </View>
 
-              {notice && filter !== 'settings' && (
+              {notice && (
                 <Pressable
                   onPress={() => Linking.openURL('https://supabase.com/dashboard')}
                   style={styles.notice}
@@ -422,21 +1108,35 @@ export default function App() {
           renderItem={renderOpportunity}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           ListEmptyComponent={
-            filter === 'settings' ? null : loading ? (
+            loading ? (
               <View style={styles.emptyState}>
                 <ActivityIndicator color="#D9FF57" />
-                <Text style={styles.emptyText}>Φορτώνω τις ευκαιρίες...</Text>
+                <Text style={styles.emptyText}>Loading opportunities...</Text>
               </View>
             ) : (
               <View style={styles.emptyState}>
                 <Text style={styles.emptyGlyph}>◎</Text>
-                <Text style={styles.emptyTitle}>Δεν βρέθηκε κάτι εδώ</Text>
-                <Text style={styles.emptyText}>Δοκίμασε άλλη αναζήτηση ή φίλτρο.</Text>
+                <Text style={styles.emptyTitle}>{emptyTitle}</Text>
+                <Text style={styles.emptyText}>{emptyMessage}</Text>
               </View>
             )
           }
           ListFooterComponent={
             <View style={styles.footer}>
+              {hasMoreOpportunities && (
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() =>
+                    setVisibleLimit((current) => current + OPPORTUNITY_PAGE_SIZE)
+                  }
+                  style={({ pressed }) => [
+                    styles.loadMoreButton,
+                    pressed && styles.authButtonPressed,
+                  ]}
+                >
+                  <Text style={styles.loadMoreText}>Load more</Text>
+                </Pressable>
+              )}
               <Text style={styles.footerText}>Powered by Supabase · refreshed on demand</Text>
             </View>
           }
@@ -454,34 +1154,68 @@ const styles = StyleSheet.create({
   },
   content: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 30 },
   topBar: {
-    minHeight: 58,
-    justifyContent: 'center',
+    minHeight: 82,
+    justifyContent: 'flex-start',
     alignItems: 'center',
-    marginBottom: 14,
-  },
-  topBarCopy: { alignItems: 'center', paddingHorizontal: 8 },
-  eyebrow: { color: '#D9FF57', fontSize: 16, fontWeight: '900', letterSpacing: 1.2 },
-  greeting: { color: '#EAF3F1', fontSize: 13, marginTop: 5, textAlign: 'center' },
-  compactStats: {
+    marginBottom: 12,
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 14,
   },
-  statChip: {
-    minHeight: 38,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 12,
-    backgroundColor: '#10191A',
+  profileButton: {
+    position: 'absolute',
+    left: 0,
+    top: 5,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     borderWidth: 1,
-    borderColor: '#243436',
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 6,
+    borderColor: '#304143',
+    backgroundColor: '#172224',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
   },
-  statValue: { color: '#D9FF57', fontSize: 17, fontWeight: '800' },
-  statLabel: { color: '#8FB3AE', fontSize: 11, fontWeight: '700' },
+  profileButtonPressed: { opacity: 0.75, transform: [{ scale: 0.97 }] },
+  profileButtonImage: { width: '100%', height: '100%' },
+  profileButtonText: { color: '#D9FF57', fontSize: 17, fontWeight: '900' },
+  headerSearchButton: {
+    position: 'absolute',
+    right: 0,
+    top: 5,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: '#304143',
+    backgroundColor: '#172224',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerSearchButtonActive: {
+    backgroundColor: '#D9FF57',
+    borderColor: '#D9FF57',
+  },
+  headerSearchIcon: { color: '#D9FF57', fontSize: 25, lineHeight: 27, fontWeight: '900' },
+  headerSearchIconActive: { color: '#071A1C' },
+  topBarCopy: {
+    flex: 1,
+    minHeight: 82,
+    marginLeft: 60,
+    marginRight: 60,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  brandMarkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  homeLogo: {
+    width: 44,
+    height: 44,
+  },
+  eyebrow: { color: '#D9FF57', fontSize: 20, fontWeight: '900', letterSpacing: 0 },
+  greeting: { color: '#EAF3F1', fontSize: 12, marginTop: 7, textAlign: 'center' },
   authScreen: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   loginScreen: {
     flex: 1,
@@ -490,6 +1224,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   loginHeader: { alignItems: 'center', marginBottom: 28 },
+  loginLogo: {
+    width: 118,
+    height: 118,
+    borderRadius: 26,
+    marginBottom: 18,
+  },
   loginTitle: { color: '#D9FF57', fontSize: 34, fontWeight: '900', letterSpacing: 2 },
   loginSubtitle: {
     color: '#B8C7C4',
@@ -513,31 +1253,60 @@ const styles = StyleSheet.create({
   loginButtonText: { color: '#071A1C', fontSize: 15, fontWeight: '900' },
   loginNotice: { color: '#CECFA7', fontSize: 12, marginTop: 14, textAlign: 'center' },
   searchBox: {
-    height: 54,
-    marginTop: 18,
-    borderRadius: 17,
+    height: 50,
+    marginTop: 8,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: '#243436',
-    backgroundColor: '#10191A',
+    backgroundColor: '#0D1718',
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
   },
-  searchIcon: { color: '#D9FF57', fontSize: 24, marginRight: 10, transform: [{ rotate: '-18deg' }] },
+  searchIcon: { color: '#D9FF57', fontSize: 22, marginRight: 9 },
   searchInput: { flex: 1, height: '100%', color: '#EDF4F2', fontSize: 15 },
   clearIcon: { color: '#91A09F', fontSize: 24 },
-  filters: { flexDirection: 'row', gap: 8, marginTop: 14 },
+  filters: { flexDirection: 'row', gap: 9, marginTop: 14, paddingTop: 9 },
   filterButton: {
+    minHeight: 39,
     paddingHorizontal: 17,
     paddingVertical: 10,
     borderRadius: 100,
     backgroundColor: '#111B1C',
     borderWidth: 1,
     borderColor: '#273638',
+    justifyContent: 'center',
   },
   filterButtonActive: { backgroundColor: '#D9FF57', borderColor: '#D9FF57' },
   filterText: { color: '#91A09F', fontSize: 13, fontWeight: '700' },
   filterTextActive: { color: '#071A1C' },
+  filterCountBadge: {
+    position: 'absolute',
+    top: -9,
+    right: -10,
+    minWidth: 36,
+    height: 20,
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    backgroundColor: '#203133',
+    borderWidth: 1,
+    borderColor: '#314446',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filterCountBadgeActive: {
+    backgroundColor: '#071A1C',
+    borderColor: '#071A1C',
+  },
+  filterCountText: {
+    color: '#D9FF57',
+    fontSize: 10,
+    fontWeight: '900',
+    lineHeight: 12,
+    width: 24,
+    textAlign: 'center',
+  },
+  filterCountTextActive: { color: '#D9FF57' },
   subfilters: { flexDirection: 'row', gap: 7, marginTop: 10 },
   subfilterButton: {
     paddingHorizontal: 13,
@@ -571,17 +1340,221 @@ const styles = StyleSheet.create({
   },
   noticeDot: { color: '#D9FF57', fontSize: 9, marginRight: 9 },
   noticeText: { flex: 1, color: '#CECFA7', fontSize: 12, lineHeight: 17 },
-  settingsPanel: {
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#243436',
-    backgroundColor: '#0E1718',
-    padding: 18,
-    marginTop: 24,
+  profileOverlay: {
+    flex: 1,
+    justifyContent: 'flex-start',
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'android' ? (NativeStatusBar.currentHeight ?? 0) + 12 : 58,
   },
+  profileBackdrop: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(0, 0, 0, 0.62)',
+  },
+  profileSheet: {
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#253537',
+    backgroundColor: '#0A1213',
+    padding: 12,
+  },
+  profileSheetTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingLeft: 6,
+    marginBottom: 2,
+  },
+  profileSheetTitle: { color: '#F2F6F4', fontSize: 16, fontWeight: '900' },
+  detailOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0, 0, 0, 0.62)',
+  },
+  detailSheet: {
+    maxHeight: '88%',
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    borderWidth: 1,
+    borderColor: '#253537',
+    backgroundColor: '#0E1718',
+    padding: 20,
+    paddingBottom: 24,
+  },
+  detailHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 14,
+  },
+  detailHeaderText: { flex: 1 },
+  detailSource: { color: '#D9FF57', fontSize: 10, fontWeight: '900', letterSpacing: 1 },
+  detailTitle: {
+    color: '#F3F7F5',
+    fontSize: 24,
+    lineHeight: 29,
+    fontWeight: '900',
+    marginTop: 8,
+  },
+  detailOrg: { color: '#7DA19D', fontSize: 13, fontWeight: '700', marginTop: 8 },
+  detailCloseButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#304143',
+    backgroundColor: '#10191A',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  detailCloseText: { color: '#DCE8E5', fontSize: 24, lineHeight: 26, fontWeight: '700' },
+  detailImage: {
+    width: '100%',
+    height: 210,
+    borderRadius: 16,
+    marginTop: 18,
+    backgroundColor: '#182122',
+  },
+  detailStats: { flexDirection: 'row', gap: 10, marginTop: 18 },
+  detailStat: {
+    flex: 1,
+    minHeight: 72,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#223032',
+    backgroundColor: '#10191A',
+    padding: 12,
+  },
+  detailStatLabel: { color: '#7DE0CF', fontSize: 10, fontWeight: '900' },
+  detailStatValue: { color: '#F2F6F4', fontSize: 14, lineHeight: 19, fontWeight: '800', marginTop: 7 },
+  detailSection: { marginTop: 22 },
+  detailSectionTitle: { color: '#F2F6F4', fontSize: 15, fontWeight: '900' },
+  detailBody: { color: '#A8B6B4', fontSize: 14, lineHeight: 21, marginTop: 9 },
+  detailStep: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    marginTop: 10,
+  },
+  detailStepIndex: {
+    width: 24,
+    height: 24,
+    borderRadius: 8,
+    backgroundColor: '#D9FF57',
+    color: '#071A1C',
+    fontSize: 12,
+    fontWeight: '900',
+    lineHeight: 24,
+    textAlign: 'center',
+  },
+  detailStepText: { flex: 1, color: '#A8B6B4', fontSize: 14, lineHeight: 21 },
+  detailTagList: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginTop: 20 },
+  detailTag: {
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: '#1A2526',
+    borderWidth: 1,
+    borderColor: '#2A3839',
+  },
+  detailTagText: { color: '#899797', fontSize: 10, fontWeight: '800' },
+  detailActions: { flexDirection: 'row', gap: 10, marginTop: 24 },
+  detailPrimaryButton: {
+    flex: 1.4,
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: '#D9FF57',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  detailPrimaryText: { color: '#071A1C', fontSize: 14, fontWeight: '900' },
+  detailSecondaryButton: {
+    flex: 1,
+    height: 48,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#304143',
+    backgroundColor: '#10191A',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  detailSecondaryButtonActive: { backgroundColor: '#D9FF57', borderColor: '#D9FF57' },
+  detailSecondaryText: { color: '#DCE8E5', fontSize: 14, fontWeight: '900' },
+  detailSecondaryTextActive: { color: '#071A1C' },
+  settingsPanel: {
+    padding: 6,
+    marginTop: 8,
+  },
+  profileHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  profileAvatar: {
+    width: 68,
+    height: 68,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: '#304143',
+    backgroundColor: '#172224',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  profileAvatarImage: { width: '100%', height: '100%' },
+  profileAvatarText: { color: '#D9FF57', fontSize: 23, fontWeight: '900' },
+  profileCopy: { flex: 1, minWidth: 0 },
   settingsTitle: { color: '#F2F6F4', fontSize: 20, fontWeight: '900' },
   settingsLabel: { color: '#7DE0CF', fontSize: 10, fontWeight: '900', marginTop: 18 },
   settingsEmail: { color: '#DCE8E5', fontSize: 14, fontWeight: '700', marginTop: 6 },
+  providerBadge: {
+    alignSelf: 'flex-start',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#334648',
+    backgroundColor: '#111B1C',
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    marginTop: 9,
+  },
+  providerBadgeText: { color: '#D9FF57', fontSize: 9, fontWeight: '900', letterSpacing: 0.8 },
+  settingsStats: { flexDirection: 'row', gap: 10, marginTop: 18 },
+  settingsStat: {
+    flex: 1,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#223032',
+    backgroundColor: '#10191A',
+    padding: 12,
+  },
+  settingsStatValue: { color: '#D9FF57', fontSize: 20, fontWeight: '900' },
+  settingsStatLabel: { color: '#7E8C8E', fontSize: 11, fontWeight: '800', marginTop: 3 },
+  profileMeta: {
+    borderTopWidth: 1,
+    borderTopColor: '#223032',
+    marginTop: 18,
+    paddingTop: 2,
+  },
+  profileMetaValue: { color: '#A8B6B4', fontSize: 12, fontWeight: '700', marginTop: 6 },
+  legalLinks: {
+    borderTopWidth: 1,
+    borderTopColor: '#223032',
+    marginTop: 18,
+    paddingTop: 10,
+    gap: 8,
+  },
+  legalLinkButton: {
+    minHeight: 42,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#223032',
+    backgroundColor: '#10191A',
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  legalLinkText: { color: '#DCE8E5', fontSize: 13, fontWeight: '800' },
+  legalLinkArrow: { color: '#D9FF57', fontSize: 15, fontWeight: '900' },
   logoutButton: {
     height: 44,
     borderRadius: 12,
@@ -596,6 +1569,16 @@ const styles = StyleSheet.create({
   emptyGlyph: { color: '#D9FF57', fontSize: 38, marginBottom: 10 },
   emptyTitle: { color: '#F2F6F4', fontWeight: '800', fontSize: 17 },
   emptyText: { color: '#718082', fontSize: 13, marginTop: 7 },
-  footer: { alignItems: 'center', paddingVertical: 28 },
+  footer: { alignItems: 'center', paddingVertical: 28, gap: 16 },
+  loadMoreButton: {
+    minWidth: 156,
+    height: 46,
+    borderRadius: 14,
+    backgroundColor: '#D9FF57',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 22,
+  },
+  loadMoreText: { color: '#071A1C', fontSize: 14, fontWeight: '900' },
   footerText: { color: '#455355', fontSize: 10, letterSpacing: 0.4 },
 });

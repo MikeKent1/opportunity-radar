@@ -1,32 +1,49 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { memo } from 'react';
-import { Image, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Opportunity } from '../types';
+import { cleanDisplayText } from '../utils/displayText';
 
 function formatDeadline(value: string | null) {
-  if (!value) return 'Χωρίς προθεσμία';
+  if (!value) return 'No deadline';
 
   const date = new Date(value);
   const days = Math.ceil((date.getTime() - Date.now()) / 86_400_000);
 
-  if (days < 0) return 'Έληξε';
-  if (days === 0) return 'Λήγει σήμερα';
-  if (days <= 30) return `${days} ημέρες ακόμη`;
+  if (days < 0) return 'Expired';
+  if (days === 0) return 'Ends today';
+  if (days <= 30) return `${days} days left`;
 
-  return date.toLocaleDateString('el-GR', { day: 'numeric', month: 'short', year: 'numeric' });
+  return date.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 function formatAmount(amount: number | null, currency: string) {
   if (!amount) return null;
-  return new Intl.NumberFormat('el-GR', {
+  return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency,
     maximumFractionDigits: 0,
   }).format(amount);
 }
 
-function OpportunityCardComponent({ opportunity }: { opportunity: Opportunity }) {
+type OpportunityCardProps = {
+  opportunity: Opportunity;
+  isSaved?: boolean;
+  isSaving?: boolean;
+  onToggleSave?: () => void;
+  onPress?: () => void;
+  onOpenExternal?: () => void;
+};
+
+function OpportunityCardComponent({
+  opportunity,
+  isSaved = false,
+  isSaving = false,
+  onToggleSave,
+  onPress,
+  onOpenExternal,
+}: OpportunityCardProps) {
   const amount = formatAmount(opportunity.amount, opportunity.currency);
   const isGrant =
     opportunity.source === 'grants' || opportunity.source === 'eufunding';
@@ -39,33 +56,33 @@ function OpportunityCardComponent({ opportunity }: { opportunity: Opportunity })
     isSocial
       ? `INSTAGRAM @${opportunity.source}`.toUpperCase()
       : opportunity.source === 'gamerpower'
-      ? 'GAMERPOWER'
-      : opportunity.source === 'epicgames'
-        ? 'EPIC GAMES'
-        : opportunity.source === 'freetogame'
-          ? 'FREE TO PLAY'
-          : opportunity.source === 'cheapshark'
-            ? 'CHEAPSHARK'
-            : opportunity.source === 'eufunding'
-              ? 'EU GRANT'
-              : opportunity.source === 'ted'
-                ? 'EU TENDER'
-                : opportunity.source === 'producthunt'
-                  ? 'PRODUCT HUNT'
-                  : opportunity.source === 'kaggle'
-                    ? 'KAGGLE'
-                    : opportunity.source === 'rss'
-                      ? 'CURATED FEED'
-                      : opportunity.source === 'reddit'
-                        ? 'REDDIT'
-        : isGrant
-          ? 'GRANT'
-          : 'GIVEAWAY';
+        ? 'GAMERPOWER'
+        : opportunity.source === 'epicgames'
+          ? 'EPIC GAMES'
+          : opportunity.source === 'freetogame'
+            ? 'FREE TO PLAY'
+            : opportunity.source === 'cheapshark'
+              ? 'CHEAPSHARK'
+              : opportunity.source === 'eufunding'
+                ? 'EU GRANT'
+                : opportunity.source === 'ted'
+                  ? 'EU TENDER'
+                  : opportunity.source === 'producthunt'
+                    ? 'PRODUCT HUNT'
+                    : opportunity.source === 'kaggle'
+                      ? 'KAGGLE'
+                      : opportunity.source === 'rss'
+                        ? 'CURATED FEED'
+                        : opportunity.source === 'reddit'
+                          ? 'REDDIT'
+                          : isGrant
+                            ? 'GRANT'
+                            : 'GIVEAWAY';
 
   return (
     <Pressable
-      accessibilityRole="link"
-      onPress={() => Linking.openURL(opportunity.url)}
+      accessibilityRole="button"
+      onPress={onPress}
       style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
     >
       <LinearGradient
@@ -82,7 +99,7 @@ function OpportunityCardComponent({ opportunity }: { opportunity: Opportunity })
                     ? ['#2A1B17', '#111817']
                     : isSocial
                       ? ['#26172B', '#111817']
-              : ['#201F18', '#111817']
+                      : ['#201F18', '#111817']
         }
         style={styles.cardGradient}
       >
@@ -95,44 +112,67 @@ function OpportunityCardComponent({ opportunity }: { opportunity: Opportunity })
           />
         )}
         <View style={styles.cardTop}>
-          <View
-            style={[
-              styles.sourceBadge,
-              isGrant ? styles.grantBadge : isLaunch ? styles.launchBadge : styles.giveawayBadge,
-              isCompetition && styles.competitionBadge,
-              isFeed && styles.feedBadge,
-              isCommunity && styles.communityBadge,
-              isSocial && styles.socialBadge,
-            ]}
-          >
-            <Text
+          <View style={styles.cardTopLeft}>
+            <View
               style={[
-                styles.sourceText,
-                isGrant
-                  ? styles.grantText
-                  : isLaunch
-                    ? styles.launchText
-                    : isCompetition
-                      ? styles.competitionText
-                      : isFeed
-                        ? styles.feedText
-                        : isCommunity
-                          ? styles.communityText
-                          : isSocial
-                            ? styles.socialText
-                      : styles.giveawayText,
+                styles.sourceBadge,
+                isGrant ? styles.grantBadge : isLaunch ? styles.launchBadge : styles.giveawayBadge,
+                isCompetition && styles.competitionBadge,
+                isFeed && styles.feedBadge,
+                isCommunity && styles.communityBadge,
+                isSocial && styles.socialBadge,
               ]}
             >
-              {sourceLabel}
-            </Text>
+              <Text
+                style={[
+                  styles.sourceText,
+                  isGrant
+                    ? styles.grantText
+                    : isLaunch
+                      ? styles.launchText
+                      : isCompetition
+                        ? styles.competitionText
+                        : isFeed
+                          ? styles.feedText
+                          : isCommunity
+                            ? styles.communityText
+                            : isSocial
+                              ? styles.socialText
+                              : styles.giveawayText,
+                ]}
+              >
+                {sourceLabel}
+              </Text>
+            </View>
+            <Text style={styles.deadline}>{formatDeadline(opportunity.deadline)}</Text>
           </View>
-          <Text style={styles.deadline}>{formatDeadline(opportunity.deadline)}</Text>
+          {onToggleSave && (
+            <Pressable
+              accessibilityLabel={isSaved ? 'Remove from saved' : 'Save opportunity'}
+              accessibilityRole="button"
+              disabled={isSaving}
+              hitSlop={8}
+              onPress={(event) => {
+                event.stopPropagation();
+                onToggleSave();
+              }}
+              style={[
+                styles.saveButton,
+                isSaved && styles.saveButtonActive,
+                isSaving && styles.saveButtonDisabled,
+              ]}
+            >
+              <Text style={[styles.saveIcon, isSaved && styles.saveIconActive]}>
+                {isSaved ? '★' : '☆'}
+              </Text>
+            </Pressable>
+          )}
         </View>
 
         <Text style={styles.organization}>{opportunity.organization}</Text>
-        <Text style={styles.title}>{opportunity.title}</Text>
+        <Text style={styles.title}>{cleanDisplayText(opportunity.title)}</Text>
         <Text numberOfLines={3} style={styles.summary}>
-          {opportunity.summary}
+          {cleanDisplayText(opportunity.summary)}
         </Text>
 
         <View style={styles.tags}>
@@ -147,36 +187,45 @@ function OpportunityCardComponent({ opportunity }: { opportunity: Opportunity })
           <View>
             <Text style={styles.valueLabel}>
               {isGrant
-                ? 'ΕΩΣ'
+                ? 'UP TO'
                 : opportunity.source === 'freetogame'
-                  ? 'ΜΟΝΤΕΛΟ'
-                : opportunity.source === 'ted'
-                  ? 'ΕΚΤΙΜΩΜΕΝΗ ΑΞΙΑ'
-                  : opportunity.source === 'producthunt'
-                    ? 'ΤΥΠΟΣ'
-                    : opportunity.source === 'kaggle'
-                      ? 'ΒΡΑΒΕΙΟ'
-                      : opportunity.source === 'rss'
-                        ? 'ΠΗΓΗ'
-                        : opportunity.source === 'reddit'
-                          ? 'ΚΟΙΝΟΤΗΤΑ'
-                    : 'ΑΞΙΑ'}
+                  ? 'TYPE'
+                  : opportunity.source === 'ted'
+                    ? 'ESTIMATED VALUE'
+                    : opportunity.source === 'producthunt'
+                      ? 'TYPE'
+                      : opportunity.source === 'kaggle'
+                        ? 'PRIZE'
+                        : opportunity.source === 'rss'
+                          ? 'SOURCE'
+                          : opportunity.source === 'reddit'
+                            ? 'COMMUNITY'
+                            : 'VALUE'}
             </Text>
             <Text style={styles.value}>
               {opportunity.source === 'freetogame'
-                ? 'Δωρεάν παιχνίδι'
+                ? 'Free game'
                 : opportunity.source === 'producthunt'
                   ? 'Launch'
                   : opportunity.source === 'rss'
-                    ? 'Άρθρο / ευκαιρία'
+                    ? 'Article / opportunity'
                     : opportunity.source === 'reddit'
                       ? opportunity.organization
-                : amount ?? 'Δες λεπτομέρειες'}
+                      : amount ?? 'View details'}
             </Text>
           </View>
-          <View style={styles.arrowButton}>
+          <Pressable
+            accessibilityLabel="Open opportunity link"
+            accessibilityRole="link"
+            hitSlop={8}
+            onPress={(event) => {
+              event.stopPropagation();
+              onOpenExternal?.();
+            }}
+            style={styles.arrowButton}
+          >
             <Text style={styles.arrow}>↗</Text>
-          </View>
+          </Pressable>
         </View>
       </LinearGradient>
     </Pressable>
@@ -201,7 +250,8 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     backgroundColor: '#182122',
   },
-  cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  cardTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12 },
+  cardTopLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
   sourceBadge: { paddingHorizontal: 9, paddingVertical: 5, borderRadius: 7 },
   grantBadge: { backgroundColor: '#193C39' },
   giveawayBadge: { backgroundColor: '#3B3B1B' },
@@ -219,6 +269,20 @@ const styles = StyleSheet.create({
   communityText: { color: '#FF8A63' },
   socialText: { color: '#F0A7FF' },
   deadline: { color: '#849395', fontSize: 11, fontWeight: '600' },
+  saveButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#304143',
+    backgroundColor: '#10191A',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  saveButtonActive: { backgroundColor: '#D9FF57', borderColor: '#D9FF57' },
+  saveButtonDisabled: { opacity: 0.55 },
+  saveIcon: { color: '#8FA0A1', fontSize: 19, lineHeight: 21, fontWeight: '900' },
+  saveIconActive: { color: '#071A1C' },
   organization: { color: '#7DA19D', fontSize: 11, marginTop: 18, fontWeight: '700' },
   title: {
     color: '#F3F7F5',

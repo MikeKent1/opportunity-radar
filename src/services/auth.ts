@@ -11,9 +11,34 @@ const redirectTo = AuthSession.makeRedirectUri({
 });
 
 function extractParams(url: string) {
-  const [, query = ''] = url.split('?');
-  const [, hash = ''] = url.split('#');
-  return new URLSearchParams(query || hash);
+  const params = new URLSearchParams();
+
+  try {
+    const callbackUrl = new URL(url);
+    callbackUrl.searchParams.forEach((value, key) => params.set(key, value));
+    new URLSearchParams(callbackUrl.hash.replace(/^#/, '')).forEach((value, key) =>
+      params.set(key, value),
+    );
+    return params;
+  } catch {
+    const [beforeHash, hash = ''] = url.split('#');
+    const [, query = ''] = beforeHash.split('?');
+    new URLSearchParams(query).forEach((value, key) => params.set(key, value));
+    new URLSearchParams(hash).forEach((value, key) => params.set(key, value));
+    return params;
+  }
+}
+
+function getCallbackError(params: URLSearchParams) {
+  const error = params.get('error') ?? params.get('error_code');
+  if (!error) return null;
+
+  const description =
+    params.get('error_description') ??
+    params.get('error_message') ??
+    'Google sign in returned an error.';
+
+  return `${description} (${error})`;
 }
 
 export async function signInWithGoogle() {
@@ -40,6 +65,11 @@ export async function signInWithGoogle() {
   }
 
   const params = extractParams(result.url);
+  const callbackError = getCallbackError(params);
+  if (callbackError) {
+    return { ok: false, message: callbackError };
+  }
+
   const code = params.get('code');
   const accessToken = params.get('access_token');
   const refreshToken = params.get('refresh_token');

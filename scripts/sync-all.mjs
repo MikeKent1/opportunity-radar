@@ -51,12 +51,18 @@ const providers = [
   { id: 'producthunt', label: 'Product Hunt', script: 'scripts/sync-product-hunt.mjs' },
   { id: 'kaggle', label: 'Kaggle', script: 'scripts/sync-kaggle.mjs' },
   { id: 'rss', label: 'RSS feeds', script: 'scripts/sync-rss-feeds.mjs' },
+  { id: 'sweepstakes-web', label: 'Sweepstakes web', script: 'scripts/sync-sweepstakes-web.mjs' },
   { id: 'reddit', label: 'Reddit', script: 'scripts/sync-reddit.mjs', optional: true },
   {
     id: 'apify-instagram',
     label: 'Apify Instagram',
     script: 'scripts/sync-apify-instagram.mjs',
     optional: true,
+  },
+  {
+    id: 'expired-cleanup',
+    label: 'Expired cleanup',
+    script: 'scripts/close-expired-opportunities.mjs',
   },
   {
     id: 'reward-categorization',
@@ -147,6 +153,7 @@ const runProvider = (provider) =>
         stdout: redact(stdout),
         stderr: redact(stderr),
         imported: Number(payload?.imported ?? 0),
+        closed: Number(payload?.closed ?? 0),
         skipped: payload?.skipped ? String(payload.skipped) : '',
         note: payload?.note ? String(payload.note) : '',
         deduplicated: Number(payload?.deduplicated ?? 0),
@@ -191,14 +198,14 @@ const blockingFailures = strict ? failures : [];
 const markdown = [
   '## Scheduled sync summary',
   '',
-  '| Provider | Status | Imported | Duration | Notes |',
-  '| --- | --- | ---: | ---: | --- |',
+  '| Provider | Status | Imported | Closed | Duration | Notes |',
+  '| --- | --- | ---: | ---: | ---: | --- |',
   ...summaryRows.map((row) => {
     const status = row.ok ? '✅ OK' : row.optional ? '⚠️ Skipped/failed' : '❌ Failed';
     const notes = (row.skipped || row.error || row.note || '').replace(/\s+/g, ' ').slice(0, 180);
     const dedupeNote = row.deduplicated ? `Deduplicated ${row.deduplicated}. ` : '';
     const retryNote = row.attempts > 1 ? `Attempts ${row.attempts}. ` : '';
-    return `| ${row.label} | ${status} | ${row.imported} | ${Math.round(
+    return `| ${row.label} | ${status} | ${row.imported} | ${row.closed ?? 0} | ${Math.round(
       row.durationMs / 1000,
     )}s | ${dedupeNote}${retryNote}${notes} |`;
   }),

@@ -92,6 +92,10 @@ const clean = (value = '') =>
     .replace(/<[^>]*>/g, ' ')
     .replace(/&nbsp;/g, ' ')
     .replace(/&amp;/g, '&')
+    .replace(/&middot;/g, ' - ')
+    .replace(/&bull;/g, ' - ')
+    .replace(/&ndash;/g, '-')
+    .replace(/&mdash;/g, '-')
     .replace(/\s+/g, ' ')
     .trim();
 const first = (metadata, key) =>

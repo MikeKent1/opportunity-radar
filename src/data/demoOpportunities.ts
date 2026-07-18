@@ -8,7 +8,7 @@ export const demoOpportunities: Opportunity[] = [
     title: 'Climate Innovation Fund',
     organization: 'European Green Initiative',
     summary:
-      'Χρηματοδότηση για ομάδες που αναπτύσσουν πρακτικές λύσεις γύρω από το κλίμα, την ενέργεια και τις βιώσιμες πόλεις.',
+      'Funding for teams building practical solutions around climate, energy, and sustainable cities.',
     url: 'https://www.grants.gov/',
     image_url: null,
     amount: 75000,
@@ -25,7 +25,7 @@ export const demoOpportunities: Opportunity[] = [
     title: 'Free PC Game Giveaway',
     organization: 'GamerPower',
     summary:
-      'Ένα πλήρες creator setup με κάμερα, μικρόφωνο και φωτισμό για το επόμενο μεγάλο σου project.',
+      'A complete creator setup with a camera, microphone, and lighting for your next big project.',
     url: 'https://www.gamerpower.com/',
     image_url: 'https://www.gamerpower.com/favicon.ico',
     amount: 29.99,
@@ -42,7 +42,7 @@ export const demoOpportunities: Opportunity[] = [
     title: 'Digital Communities Grant',
     organization: 'Community Tech Network',
     summary:
-      'Πρόγραμμα για ψηφιακά εργαλεία που κάνουν τις τοπικές κοινότητες πιο προσβάσιμες, ανθεκτικές και συνδεδεμένες.',
+      'A program for digital tools that make local communities more accessible, resilient, and connected.',
     url: 'https://www.grants.gov/',
     image_url: null,
     amount: 120000,

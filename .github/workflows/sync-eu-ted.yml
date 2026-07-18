@@ -30,10 +30,11 @@ jobs:
       REDDIT_KEYWORDS: ${{ secrets.REDDIT_KEYWORDS }}
       REDDIT_MIN_SCORE: ${{ secrets.REDDIT_MIN_SCORE }}
       APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+      APIFY_MONTHLY_USAGE_GUARD_USD: 4.25
       INSTAGRAM_ACTOR_ID: sones/instagram-posts-scraper-lowcost
       INSTAGRAM_ACTOR_MODE: lowcost
-      INSTAGRAM_POSTS_LIMIT: ${{ secrets.INSTAGRAM_POSTS_LIMIT }}
-      INSTAGRAM_ROTATION_BUCKETS: 4
+      INSTAGRAM_POSTS_LIMIT: 2
+      INSTAGRAM_ROTATION_BUCKETS: 20
       INSTAGRAM_NEWER_THAN_DAYS: 5
       INSTAGRAM_SOURCE_USERNAMES: ${{ secrets.INSTAGRAM_SOURCE_USERNAMES }}
       SUPABASE_PROJECT_REF: oqtqngqrelmszofoknqr
@@ -60,3 +61,17 @@ jobs:
 
       - name: Sync scheduled opportunities
         run: npm run scheduled:sync
+
+      - name: Capture pipeline health
+        if: always()
+        env:
+          PIPELINE_HEALTH_OUTPUT: pipeline-health.json
+        run: npm run pipeline:health
+
+      - name: Upload pipeline health artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-health
+          path: pipeline-health.json
+          if-no-files-found: ignore

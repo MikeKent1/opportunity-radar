@@ -5,10 +5,12 @@
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",
     "@supabase/supabase-js": "^2.108.2",
-    "expo": "~56.0.12",
-    "expo-auth-session": "~56.0.14",
-    "expo-dev-client": "~56.0.20",
+    "expo": "~56.0.16",
+    "expo-auth-session": "~56.0.15",
+    "expo-crypto": "~56.0.4",
+    "expo-dev-client": "~56.0.23",
     "expo-linear-gradient": "~56.0.4",
+    "expo-splash-screen": "~56.0.13",
     "expo-status-bar": "~56.0.4",
     "expo-web-browser": "~56.0.5",
     "fast-xml-parser": "^5.9.3",
@@ -19,6 +21,7 @@
     "react-native-web": "^0.21.2"
   },
   "devDependencies": {
+    "@expo/ngrok": "^4.1.3",
     "@types/react": "~19.2.2",
     "supabase": "^2.108.0",
     "typescript": "~6.0.3"
@@ -40,12 +43,19 @@
     "producthunt:sync": "node scripts/sync-product-hunt.mjs",
     "kaggle:sync": "node scripts/sync-kaggle.mjs",
     "rss:sync": "node scripts/sync-rss-feeds.mjs",
+    "sweepstakes:sync": "node scripts/sync-sweepstakes-web.mjs",
     "reddit:sync": "node scripts/sync-reddit.mjs",
     "sync:apify": "node scripts/sync-apify-instagram.mjs",
+    "rewards:audit": "node scripts/audit-giveaway-categorization.mjs",
     "rewards:backfill": "node scripts/backfill-giveaway-rewards.mjs",
+    "expired:cleanup": "node scripts/close-expired-opportunities.mjs",
+    "pipeline:health": "node scripts/pipeline-health.mjs",
     "scheduled:sync": "node scripts/sync-all.mjs",
     "scheduled:sync:strict": "node scripts/sync-all.mjs --strict",
     "eu-ted:sync": "npm run scheduled:sync"
+  },
+  "overrides": {
+    "uuid": "11.1.1"
   },
   "private": true
 }

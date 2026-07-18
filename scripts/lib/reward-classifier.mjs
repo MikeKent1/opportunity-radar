@@ -6,6 +6,17 @@ const hasMoneyAmount = (haystack) =>
   /(?:[$€£]\s?\d{2,}(?:[,.]\d{3})*(?:\.\d{2})?|\b\d{2,}(?:[,.]\d{3})*(?:\.\d{2})?\s?(?:usd|eur|gbp|dollars?|euros?|pounds?)\b)/i.test(
     haystack,
   );
+const hasShortMoneyAmount = (haystack) => /[$€£]\s?\d+(?:\.\d+)?\s?k\b/i.test(haystack);
+const hasTravelPrize = (haystack) =>
+  /\b(win|wins|winner|winners|get|gets|prize|grand prize|chance to win).{0,90}\b(trips?|flights?|hotel stays?|vacations?|holidays?|getaways?|resorts?|cruises?|flyaways?)\b/i.test(
+    haystack,
+  ) ||
+  /\b(trips?|flights?|hotel stays?|vacations?|holidays?|getaways?|resorts?|cruises?|flyaways?)\s+(to|in|for|with)\b/i.test(
+    haystack,
+  ) ||
+  /\b(night stay|hotel stay|stay for two|luxury escape|dream trip|around the world cruise)\b/i.test(
+    haystack,
+  );
 
 export const rewardSubcategories = [
   'game',
@@ -18,11 +29,20 @@ export const rewardSubcategories = [
   'software',
   'other',
 ];
+const rewardSubcategoryTagSet = new Set([
+  ...rewardSubcategories,
+  'games',
+  'gift cards',
+  'in-game',
+  'trips',
+]);
 
 export function classifyRewardType(opportunity) {
-  const tags = Array.isArray(opportunity?.tags) ? opportunity.tags : [];
+  const rawTags = Array.isArray(opportunity?.tags) ? opportunity.tags : [];
+  const tags = rawTags.filter((tag) => !rewardSubcategoryTagSet.has(lower(tag)));
   const raw = opportunity?.raw_data && typeof opportunity.raw_data === 'object' ? opportunity.raw_data : {};
   const source = lower(opportunity?.source);
+  const sourceType = lower(opportunity?.source_type);
   const title = lower(opportunity?.title);
   const rawType = lower(raw.type ?? tags[0]);
   const sourceSpecificText = lower([opportunity?.title, opportunity?.summary, ...tags, raw.type].join(' '));
@@ -72,7 +92,6 @@ export function classifyRewardType(opportunity) {
       opportunity?.summary,
       opportunity?.organization,
       opportunity?.source,
-      opportunity?.subcategory,
       ...tags,
       raw.type,
       raw.platforms,
@@ -84,6 +103,56 @@ export function classifyRewardType(opportunity) {
   );
 
   if (!haystack) return 'other';
+
+  const socialHardwareSources = [
+    'alienware',
+    'amd',
+    'aorus_official',
+    'asusrog',
+    'astrogaming',
+    'coolermaster',
+    'corsair',
+    'cyberpowerpc',
+    'drop',
+    'elgato',
+    'gigabyte_official',
+    'gskillgaming',
+    'hyperx',
+    'ibuypowerpc',
+    'intelgaming',
+    'logitechg',
+    'maingear',
+    'msigaming',
+    'nvidiageforce',
+    'nzxt',
+    'originpc',
+    'razer',
+    'scufgaming',
+    'secretlab',
+    'steelseries',
+    'thermaltakeusa',
+    'turtlebeach',
+    'zotacgaming',
+  ];
+
+  if (hasTravelPrize(haystack)) {
+    if (
+      includesAny(haystack, [
+        'monitor',
+        'keyboard',
+        'mouse',
+        'headset',
+        'gpu',
+        'gaming pc',
+        'pc build',
+        'setup',
+      ])
+    ) {
+      return 'hardware';
+    }
+
+    return 'trip';
+  }
 
   if (
     includesAny(haystack, [
@@ -104,6 +173,7 @@ export function classifyRewardType(opportunity) {
 
   if (
     hasMoneyAmount(haystack) ||
+    hasShortMoneyAmount(haystack) ||
     includesAny(haystack, [
       'ach transfer',
       'award money',
@@ -150,6 +220,21 @@ export function classifyRewardType(opportunity) {
       'resort',
     ])
   ) {
+    if (
+      includesAny(haystack, [
+        'monitor',
+        'keyboard',
+        'mouse',
+        'headset',
+        'gpu',
+        'gaming pc',
+        'pc build',
+        'setup',
+      ])
+    ) {
+      return 'hardware';
+    }
+
     return 'trip';
   }
 
@@ -164,12 +249,36 @@ export function classifyRewardType(opportunity) {
       'laptop',
       'pc build',
       'gaming pc',
+      'gaming reasons',
+      'hand-painted',
+      'oled monitor',
+      'rtx',
+      'setup',
+      'signed panel',
+      'system',
+      'ultra 5',
       'chair',
+      'cooler',
       'controller',
       'wheel',
       'microphone',
       'camera',
+      'car',
+      'cars',
+      'truck',
+      'motorcycle',
+      'motorbike',
+      'bike',
+      'bicycle',
+      'vehicle',
+      'appliance',
+      'speaker',
+      'speakers',
       'hardware',
+      'maingear',
+      'microcenter',
+      'msi',
+      'nvidia',
       'razer',
       'corsair',
       'logitech',
@@ -179,18 +288,22 @@ export function classifyRewardType(opportunity) {
     return 'hardware';
   }
 
+  if (sourceType === 'social' && socialHardwareSources.includes(source)) {
+    return 'hardware';
+  }
+
   if (
     includesAny(haystack, [
       'subscription',
       'software',
       'license',
-      'app',
       'saas',
       'tool',
       'pro plan',
       'premium',
       'membership',
-    ])
+    ]) ||
+    /\bapp\b/i.test(haystack)
   ) {
     return 'software';
   }
@@ -201,8 +314,6 @@ export function classifyRewardType(opportunity) {
       'add-on',
       'addon',
       'expansion',
-      'pack',
-      'bundle',
       'skin',
       'outfit',
       'cloak',

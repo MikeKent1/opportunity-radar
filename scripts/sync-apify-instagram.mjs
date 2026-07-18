@@ -34,11 +34,12 @@ const sourceUsernames = new Set(
     .map((username) => username.trim().toLowerCase())
     .filter(Boolean),
 );
-const postsLimit = Number(setting('INSTAGRAM_POSTS_LIMIT') ?? 10);
+const postsLimit = Number(setting('INSTAGRAM_POSTS_LIMIT') ?? 2);
 const apifyTimeoutMs = Number(setting('APIFY_TIMEOUT_MS') ?? 180_000);
 const rotationBuckets = Math.max(1, Number(setting('INSTAGRAM_ROTATION_BUCKETS') ?? 1));
 const rotationBucketOverride = setting('INSTAGRAM_ROTATION_BUCKET');
 const newerThanDays = Number(setting('INSTAGRAM_NEWER_THAN_DAYS') ?? 5);
+const apifyMonthlyUsageGuardUsd = Number(setting('APIFY_MONTHLY_USAGE_GUARD_USD') ?? 4.25);
 
 const finish = (payload) => {
   console.log(JSON.stringify({ providers: ['apify-instagram'], ...payload }));
@@ -61,6 +62,23 @@ if (!apifyToken || !instagramActorId) {
 }
 
 const supabase = createClient(supabaseUrl, serviceRoleKey);
+
+async function loadApifyMonthlyUsageUsd() {
+  if (!Number.isFinite(apifyMonthlyUsageGuardUsd) || apifyMonthlyUsageGuardUsd <= 0) {
+    return null;
+  }
+
+  const response = await fetch('https://api.apify.com/v2/users/me/usage/monthly', {
+    headers: { Authorization: `Bearer ${apifyToken}` },
+  });
+  if (!response.ok) {
+    errors.push(`Apify usage check failed: HTTP ${response.status}`);
+    return null;
+  }
+
+  const payload = await response.json();
+  return Number(payload?.data?.totalUsageCreditsUsdAfterVolumeDiscount ?? 0);
+}
 
 const giveawayKeywords = [
   'giveaway',
@@ -148,6 +166,15 @@ function getPostedAt(item) {
 
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
+function isRecentEnough(postedAt) {
+  if (!postedAt || !Number.isFinite(newerThanDays) || newerThanDays <= 0) return true;
+
+  const postedTime = new Date(postedAt).getTime();
+  if (Number.isNaN(postedTime)) return true;
+
+  return postedTime >= new Date(daysAgo(newerThanDays)).getTime();
 }
 
 function detectGiveaway(caption) {
@@ -365,6 +392,31 @@ const errors = [];
 
 try {
   const currentRotationBucket = getCurrentRotationBucket();
+  const monthlyUsageUsd = await loadApifyMonthlyUsageUsd();
+  if (monthlyUsageUsd !== null && monthlyUsageUsd >= apifyMonthlyUsageGuardUsd) {
+    finish({
+      imported: 0,
+      postsSaved: 0,
+      actorMode: isLowcostActor(instagramActorId) ? 'lowcost' : 'legacy',
+      actorId: instagramActorId,
+      rotation: {
+        buckets: rotationBuckets,
+        bucket: currentRotationBucket,
+        selectedSources: 0,
+        totalSources: sources?.length ?? 0,
+        bypassed: sourceUsernames.size > 0,
+      },
+      apifyUsage: {
+        monthlyUsageUsd,
+        guardUsd: apifyMonthlyUsageGuardUsd,
+      },
+      skipped: `Apify monthly usage ${monthlyUsageUsd.toFixed(2)} reached guard ${apifyMonthlyUsageGuardUsd.toFixed(
+        2,
+      )}`,
+    });
+    process.exit(0);
+  }
+
   const enabledSources = (sources ?? []).filter(
     (source) =>
       (sourceUsernames.size === 0 || sourceUsernames.has(source.username.toLowerCase())) &&
@@ -407,7 +459,8 @@ try {
         ai_status: detection.isGiveaway ? 'rule_giveaway' : 'rule_not_giveaway',
       };
     })
-    .filter(Boolean);
+    .filter(Boolean)
+    .filter((post) => isRecentEnough(post.posted_at));
 
   for (const post of socialPosts) {
     const stats = sourceStats[post.source.username];
@@ -518,6 +571,13 @@ try {
       totalSources: sources?.length ?? 0,
       bypassed: sourceUsernames.size > 0,
     },
+    apifyUsage:
+      monthlyUsageUsd === null
+        ? null
+        : {
+            monthlyUsageUsd,
+            guardUsd: apifyMonthlyUsageGuardUsd,
+          },
     note:
       rotationBuckets > 1 && sourceUsernames.size === 0
         ? `Rotation bucket ${currentRotationBucket + 1}/${rotationBuckets}, selected ${enabledSources.length}/${sources?.length ?? 0} sources`

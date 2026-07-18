@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { createClient } from '@supabase/supabase-js';
-import { classifyRewardType } from './lib/reward-classifier.mjs';
+import { classifyRewardType, rewardSubcategories } from './lib/reward-classifier.mjs';
 
 const env = fs.existsSync('.env')
   ? Object.fromEntries(
@@ -36,6 +36,26 @@ if (!supabaseUrl || !serviceRoleKey) {
 
 const supabase = createClient(supabaseUrl, serviceRoleKey);
 const giveawaySources = ['gamerpower', 'epicgames', 'cheapshark', 'kingsumo'];
+const rewardSubcategorySet = new Set(rewardSubcategories);
+
+function normalizeGeneratedRewardTag(opportunity, subcategory) {
+  if (!['web', 'social'].includes(opportunity.source_type)) return opportunity.tags;
+  if (!Array.isArray(opportunity.tags) || opportunity.tags.length === 0) return opportunity.tags;
+
+  const nextTags = [...opportunity.tags];
+  const lastTag = String(nextTags.at(-1) ?? '').toLowerCase();
+  if (rewardSubcategorySet.has(lastTag) && lastTag !== subcategory) {
+    nextTags[nextTags.length - 1] = subcategory;
+  }
+
+  return nextTags;
+}
+
+function tagsChanged(left, right) {
+  if (!Array.isArray(left) || !Array.isArray(right)) return false;
+  if (left.length !== right.length) return true;
+  return left.some((item, index) => item !== right[index]);
+}
 
 const { data, error } = await supabase
   .from('opportunities')
@@ -45,30 +65,38 @@ const { data, error } = await supabase
 
 if (error) throw error;
 
-const updates = new Map();
+const updates = [];
 const counts = {};
 
 for (const opportunity of data ?? []) {
   const subcategory = classifyRewardType(opportunity);
+  const tags = normalizeGeneratedRewardTag(opportunity, subcategory);
   counts[subcategory] = (counts[subcategory] ?? 0) + 1;
 
-  if (opportunity.category !== 'giveaways' || opportunity.subcategory !== subcategory) {
-    const bucket = updates.get(subcategory) ?? [];
-    bucket.push(opportunity.id);
-    updates.set(subcategory, bucket);
+  if (
+    opportunity.category !== 'giveaways' ||
+    opportunity.subcategory !== subcategory ||
+    tagsChanged(opportunity.tags, tags)
+  ) {
+    const values = { category: 'giveaways', subcategory };
+    if (Array.isArray(tags)) values.tags = tags;
+    updates.push({
+      id: opportunity.id,
+      values,
+    });
   }
 }
 
 let updated = 0;
 
-for (const [subcategory, ids] of updates.entries()) {
+for (const update of updates) {
   const { error: updateError } = await supabase
     .from('opportunities')
-    .update({ category: 'giveaways', subcategory })
-    .in('id', ids);
+    .update(update.values)
+    .eq('id', update.id);
 
   if (updateError) throw updateError;
-  updated += ids.length;
+  updated += 1;
 }
 
 console.log(
