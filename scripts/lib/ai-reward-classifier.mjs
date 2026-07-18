@@ -108,7 +108,7 @@ export async function classifyRewardTypeWithAi(opportunity, options = {}) {
   }
 
   const apiKey = setting('OPENAI_API_KEY', env);
-  const model = setting('OPENAI_CLASSIFIER_MODEL', env) ?? setting('AI_REWARD_CLASSIFIER_MODEL', env) ?? 'gpt-5.6-mini';
+  const model = setting('OPENAI_CLASSIFIER_MODEL', env) ?? setting('AI_REWARD_CLASSIFIER_MODEL', env) ?? 'gpt-5.4-mini';
   const payload = {
     model,
     messages: [

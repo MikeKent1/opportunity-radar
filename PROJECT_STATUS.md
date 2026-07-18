@@ -237,7 +237,7 @@ Optional AI classifier secrets:
 
 ```bash
 OPENAI_API_KEY=...
-OPENAI_CLASSIFIER_MODEL=gpt-5.6-mini
+OPENAI_CLASSIFIER_MODEL=gpt-5.4-mini
 AI_REWARD_CLASSIFIER_ENABLED=true
 AI_REWARD_CLASSIFIER_MODE=uncertain
 ```
