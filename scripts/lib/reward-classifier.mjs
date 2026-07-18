@@ -1,5 +1,6 @@
 const text = (value) => String(value ?? '').trim();
 const lower = (value) => text(value).toLowerCase();
+const moneyAmountPattern = String.raw`(?:[$\u20AC\u00A3]\s?\d{2,}(?:[,.]\d{3})*(?:\.\d{2})?|\b\d{2,}(?:[,.]\d{3})*(?:\.\d{2})?\s?(?:usd|eur|gbp|dollars?|euros?|pounds?)\b)`;
 
 const includesAny = (haystack, needles) => needles.some((needle) => haystack.includes(needle));
 const hasMoneyAmount = (haystack) =>
@@ -7,6 +8,52 @@ const hasMoneyAmount = (haystack) =>
     haystack,
   );
 const hasShortMoneyAmount = (haystack) => /[$€£]\s?\d+(?:\.\d+)?\s?k\b/i.test(haystack);
+const hasPrizeValueLanguage = (haystack) =>
+  new RegExp(`${moneyAmountPattern}\\+?\\s*(?:in\\s+)?(?:prizes?|value|worth|gear|setup|bundle|package|products?)`, 'i').test(
+    haystack,
+  ) ||
+  new RegExp(`\\b(?:worth|valued at|value of)\\b.{0,30}${moneyAmountPattern}`, 'i').test(haystack);
+const hasDirectCashAmount = (haystack) =>
+  !hasPrizeValueLanguage(haystack) &&
+  new RegExp(`\\b(?:win|wins|winner|winners|get|gets|receive|earn|claim)\\b.{0,40}${moneyAmountPattern}`, 'i').test(
+    haystack,
+  );
+const hasCashPayoutSignal = (haystack) =>
+  hasDirectCashAmount(haystack) ||
+  new RegExp(
+    `\\b(?:cash|paypal|venmo|cashapp|bank transfer|direct deposit|wire transfer|payouts?|award money|prize money|reward money|usd prize)\\b.{0,40}${moneyAmountPattern}|${moneyAmountPattern}.{0,40}\\b(?:cash|paypal|venmo|cashapp|bank transfer|direct deposit|wire transfer|payouts?|award money|prize money|reward money|usd prize)\\b`,
+    'i',
+  ).test(haystack) ||
+  includesAny(haystack, [
+    'ach transfer',
+    'award money',
+    'bank transfer',
+    'bounty',
+    'cash',
+    'cash prize',
+    'cash reward',
+    'cashapp',
+    'crypto prize',
+    'direct deposit',
+    'financial prize',
+    'grant prize',
+    'microgrant',
+    'monetary prize',
+    'paypal',
+    'payoneer',
+    'payout',
+    'payouts',
+    'prize fund',
+    'prize money',
+    'prize pool',
+    'reward money',
+    'scholarship',
+    'stipend',
+    'usd prize',
+    'venmo',
+    'win money',
+    'wire transfer',
+  ]);
 const hasTravelPrize = (haystack) =>
   /\b(win|wins|winner|winners|get|gets|prize|grand prize|chance to win).{0,90}\b(trips?|flights?|hotel stays?|vacations?|holidays?|getaways?|resorts?|cruises?|flyaways?)\b/i.test(
     haystack,
@@ -171,40 +218,7 @@ export function classifyRewardType(opportunity) {
     return 'gift_card';
   }
 
-  if (
-    hasMoneyAmount(haystack) ||
-    hasShortMoneyAmount(haystack) ||
-    includesAny(haystack, [
-      'ach transfer',
-      'award money',
-      'bank transfer',
-      'bounty',
-      'cash',
-      'cash prize',
-      'cash reward',
-      'cashapp',
-      'crypto prize',
-      'direct deposit',
-      'financial prize',
-      'grant prize',
-      'microgrant',
-      'monetary prize',
-      'paypal',
-      'payoneer',
-      'payout',
-      'payouts',
-      'prize fund',
-      'prize money',
-      'prize pool',
-      'reward money',
-      'scholarship',
-      'stipend',
-      'usd prize',
-      'venmo',
-      'win money',
-      'wire transfer',
-    ])
-  ) {
+  if (hasCashPayoutSignal(haystack) || (hasShortMoneyAmount(haystack) && !hasPrizeValueLanguage(haystack))) {
     return 'cash';
   }
 

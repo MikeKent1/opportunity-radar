@@ -54,6 +54,11 @@ const rewardTags = new Set([
 ]);
 
 const includesAny = (text, needles) => needles.some((needle) => text.includes(needle));
+const moneyAmountPattern = String.raw`(?:[$\u20AC\u00A3]\s?\d{2,}(?:[,.]\d{3})*(?:\.\d{2})?|\b\d{2,}(?:[,.]\d{3})*(?:\.\d{2})?\s?(?:usd|eur|gbp|dollars?|euros?|pounds?)\b)`;
+const hasPrizeValueLanguage = (text) =>
+  new RegExp(`${moneyAmountPattern}\\+?\\s*(?:in\\s+)?(?:prizes?|value|worth|gear|setup|bundle|package|products?)`, 'i').test(
+    text,
+  ) || new RegExp(`\\b(?:worth|valued at|value of)\\b.{0,30}${moneyAmountPattern}`, 'i').test(text);
 const hasMoneyAmount = (text) =>
   /(?:[$€£]\s?\d{2,}(?:[,.]\d{3})*(?:\.\d{2})?|\b\d{2,}(?:[,.]\d{3})*(?:\.\d{2})?\s?(?:usd|eur|gbp|dollars?|euros?|pounds?)\b)/i.test(
     text,
@@ -190,7 +195,9 @@ function auditOpportunity(opportunity) {
   }
 
   if (current === 'other') {
-    if (hasMoneyAmount(text)) addIssue(issues, 'medium', 'cash', 'other bucket includes money amount');
+    if (hasMoneyAmount(text) && !hasPrizeValueLanguage(text)) {
+      addIssue(issues, 'medium', 'cash', 'other bucket includes money amount');
+    }
     if (hasGiftCard(text)) addIssue(issues, 'medium', 'gift_card', 'other bucket includes gift card language');
     if (hasTravel(text)) addIssue(issues, 'medium', 'trip', 'other bucket includes travel language');
     if (hasHardware(text)) addIssue(issues, 'medium', 'hardware', 'other bucket includes hardware language');
