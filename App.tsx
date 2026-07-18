@@ -1,11 +1,12 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   FlatList,
   Image,
+  InteractionManager,
   Linking,
   Modal,
   Platform,
@@ -61,6 +62,7 @@ type Filter =
 type PreparedOpportunity = Opportunity & {
   isGiveaway: boolean;
   searchText: string;
+  normalizedTags: string[];
 };
 
 type SecondaryFilter = {
@@ -269,12 +271,21 @@ function sortCashGiveaways(opportunities: PreparedOpportunity[]) {
 }
 
 function hasTag(opportunity: Opportunity, tag: string) {
-  return opportunity.tags.some((item) => item.toLocaleLowerCase('en') === tag.toLocaleLowerCase('en'));
+  const normalizedTag = tag.toLocaleLowerCase('en');
+  const tags =
+    'normalizedTags' in opportunity
+      ? (opportunity as PreparedOpportunity).normalizedTags
+      : opportunity.tags.map((item) => item.toLocaleLowerCase('en'));
+  return tags.some((item) => item === normalizedTag);
 }
 
 function hasTagIncluding(opportunity: Opportunity, value: string) {
   const normalizedValue = value.toLocaleLowerCase('en');
-  return opportunity.tags.some((item) => item.toLocaleLowerCase('en').includes(normalizedValue));
+  const tags =
+    'normalizedTags' in opportunity
+      ? (opportunity as PreparedOpportunity).normalizedTags
+      : opportunity.tags.map((item) => item.toLocaleLowerCase('en'));
+  return tags.some((item) => item.includes(normalizedValue));
 }
 
 function isClosingSoon(opportunity: Opportunity, days = 30) {
@@ -360,6 +371,10 @@ export default function App() {
     useState<Record<string, string>>(initialSecondaryFilters);
   const [query, setQuery] = useState('');
   const activeSecondaryFilter = activeSecondaryFilters[filter] ?? 'all';
+  const [appliedFilter, setAppliedFilter] = useState<Filter>('giveaways');
+  const [appliedSecondaryFilter, setAppliedSecondaryFilter] = useState(
+    initialSecondaryFilters.giveaways,
+  );
   const deferredQuery = useDeferredValue(query);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -375,6 +390,7 @@ export default function App() {
   const [visibleLimit, setVisibleLimit] = useState(OPPORTUNITY_PAGE_SIZE);
   const [opportunityCounts, setOpportunityCounts] =
     useState<OpportunityCounts>(initialOpportunityCounts);
+  const listRef = useRef<FlatList<PreparedOpportunity>>(null);
 
   const fetchOpportunities = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -519,13 +535,46 @@ export default function App() {
       opportunities.map((opportunity) => ({
         ...opportunity,
         isGiveaway: isGiveawayOpportunity(opportunity),
+        normalizedTags: opportunity.tags.map((tag) => tag.toLocaleLowerCase('en')),
         searchText:
           `${opportunity.title} ${opportunity.organization} ${opportunity.summary}`.toLocaleLowerCase(
-            'el',
+            'en',
           ),
       })),
     [opportunities],
   );
+
+  const opportunityBuckets = useMemo<Record<Filter, PreparedOpportunity[]>>(() => {
+    const buckets: Record<Filter, PreparedOpportunity[]> = {
+      all: [],
+      saved: [],
+      giveaways: [],
+      freetoplay: [],
+      launches: [],
+      competitions: [],
+      feeds: [],
+      community: [],
+      grants: [],
+      tenders: [],
+    };
+
+    for (const opportunity of preparedOpportunities) {
+      buckets.all.push(opportunity);
+      if (savedOpportunityIds.has(opportunity.id)) buckets.saved.push(opportunity);
+      if (opportunity.isGiveaway) buckets.giveaways.push(opportunity);
+      if (opportunity.source === 'freetogame') buckets.freetoplay.push(opportunity);
+      if (opportunity.source === 'producthunt') buckets.launches.push(opportunity);
+      if (opportunity.source === 'kaggle') buckets.competitions.push(opportunity);
+      if (opportunity.source === 'rss') buckets.feeds.push(opportunity);
+      if (opportunity.source === 'reddit') buckets.community.push(opportunity);
+      if (opportunity.source === 'grants' || opportunity.source === 'eufunding') {
+        buckets.grants.push(opportunity);
+      }
+      if (opportunity.source === 'ted') buckets.tenders.push(opportunity);
+    }
+
+    return buckets;
+  }, [preparedOpportunities, savedOpportunityIds]);
 
   const filterCounts = useMemo<Record<Filter, number>>(
     () => ({
@@ -584,44 +633,44 @@ export default function App() {
     setVisibleLimit(OPPORTUNITY_PAGE_SIZE);
   }, [filter, activeSecondaryFilter, deferredQuery]);
 
-  const visibleOpportunities = useMemo(() => {
-    const normalizedQuery = deferredQuery.trim().toLocaleLowerCase('el');
+  useEffect(() => {
+    let cancelled = false;
+    const task = InteractionManager.runAfterInteractions(() => {
+      if (cancelled) return;
+      setAppliedFilter(filter);
+      setAppliedSecondaryFilter(activeSecondaryFilter);
+    });
 
-    const filtered = preparedOpportunities.filter((opportunity) => {
-      const matchesFilter =
-        filter === 'all' ||
-        (filter === 'saved' && savedOpportunityIds.has(opportunity.id)) ||
-        opportunity.source === filter ||
-        (filter === 'tenders' && opportunity.source === 'ted') ||
-        (filter === 'launches' && opportunity.source === 'producthunt') ||
-        (filter === 'competitions' && opportunity.source === 'kaggle') ||
-        (filter === 'feeds' && opportunity.source === 'rss') ||
-        (filter === 'community' && opportunity.source === 'reddit') ||
-        (filter === 'grants' &&
-          (opportunity.source === 'grants' || opportunity.source === 'eufunding')) ||
-        (filter === 'freetoplay' && opportunity.source === 'freetogame') ||
-        (filter === 'giveaways' && opportunity.isGiveaway);
+    return () => {
+      cancelled = true;
+      task.cancel?.();
+    };
+  }, [filter, activeSecondaryFilter]);
+
+  const visibleOpportunities = useMemo(() => {
+    const normalizedQuery = deferredQuery.trim().toLocaleLowerCase('en');
+    const sourceOpportunities = opportunityBuckets[appliedFilter];
+
+    const filtered = sourceOpportunities.filter((opportunity) => {
       const matchesSecondary =
-        !secondaryFilters[filter] ||
-        matchesSecondaryFilter(opportunity, filter, activeSecondaryFilter);
+        !secondaryFilters[appliedFilter] ||
+        matchesSecondaryFilter(opportunity, appliedFilter, appliedSecondaryFilter);
       return (
-        matchesFilter &&
         matchesSecondary &&
         (!normalizedQuery || opportunity.searchText.includes(normalizedQuery))
       );
     });
 
-    if (filter === 'giveaways' && activeSecondaryFilter === 'cash') {
+    if (appliedFilter === 'giveaways' && appliedSecondaryFilter === 'cash') {
       return sortCashGiveaways(filtered);
     }
 
     return filtered;
   }, [
-    filter,
-    activeSecondaryFilter,
+    appliedFilter,
+    appliedSecondaryFilter,
     deferredQuery,
-    preparedOpportunities,
-    savedOpportunityIds,
+    opportunityBuckets,
   ]);
   const pagedOpportunities = useMemo(
     () => visibleOpportunities.slice(0, visibleLimit),
@@ -917,14 +966,15 @@ export default function App() {
         </Modal>
 
         <FlatList
+          ref={listRef}
           data={pagedOpportunities}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
-          initialNumToRender={8}
-          maxToRenderPerBatch={8}
-          updateCellsBatchingPeriod={32}
-          windowSize={7}
+          initialNumToRender={5}
+          maxToRenderPerBatch={5}
+          updateCellsBatchingPeriod={50}
+          windowSize={5}
           removeClippedSubviews={Platform.OS !== 'web'}
           refreshControl={
             <RefreshControl
@@ -1028,6 +1078,7 @@ export default function App() {
                       key={item.id}
                       onPress={() => {
                         if (filter !== item.id) {
+                          listRef.current?.scrollToOffset({ offset: 0, animated: false });
                           setVisibleLimit(OPPORTUNITY_PAGE_SIZE);
                           setFilter(item.id);
                         }
@@ -1068,6 +1119,7 @@ export default function App() {
                           if (activeSecondaryFilter === item.id) {
                             return;
                           }
+                          listRef.current?.scrollToOffset({ offset: 0, animated: false });
                           setVisibleLimit(OPPORTUNITY_PAGE_SIZE);
                           setActiveSecondaryFilters((current) => ({
                             ...current,

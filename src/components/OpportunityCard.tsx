@@ -232,7 +232,13 @@ function OpportunityCardComponent({
   );
 }
 
-export const OpportunityCard = memo(OpportunityCardComponent);
+export const OpportunityCard = memo(
+  OpportunityCardComponent,
+  (previous, next) =>
+    previous.opportunity === next.opportunity &&
+    previous.isSaved === next.isSaved &&
+    previous.isSaving === next.isSaving,
+);
 
 const styles = StyleSheet.create({
   card: {
