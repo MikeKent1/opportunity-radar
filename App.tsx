@@ -251,6 +251,47 @@ function getDeadlineTimestamp(value: string | null | undefined) {
   return Number.isFinite(timestamp) ? timestamp : Number.POSITIVE_INFINITY;
 }
 
+function getQualityScore(opportunity: PreparedOpportunity) {
+  const score = Number(opportunity.quality_score);
+  return Number.isFinite(score) ? Math.max(0, Math.min(1, score)) : 0.65;
+}
+
+function getRiskPenalty(opportunity: PreparedOpportunity) {
+  const flags = Array.isArray(opportunity.risk_flags) ? opportunity.risk_flags : [];
+  return flags.reduce((penalty, flag) => {
+    if (flag === 'broken_text') return penalty + 0.4;
+    if (flag === 'unclear_prize') return penalty + 0.3;
+    if (flag === 'unclear_entry_path') return penalty + 0.2;
+    if (flag === 'suspicious_claims' || flag === 'crypto_spam') return penalty + 0.6;
+    if (flag === 'engagement_bait' || flag === 'misleading_value') return penalty + 0.25;
+    return penalty + 0.1;
+  }, 0);
+}
+
+function getOpportunityRankScore(opportunity: PreparedOpportunity) {
+  const quality = getQualityScore(opportunity);
+  const riskPenalty = getRiskPenalty(opportunity);
+  const hasCleanSummary = opportunity.clean_summary ? 0.05 : 0;
+  const hasPrize = opportunity.prize_description ? 0.05 : 0;
+  const hasEligibility = opportunity.eligibility ? 0.03 : 0;
+
+  return quality + hasCleanSummary + hasPrize + hasEligibility - riskPenalty;
+}
+
+function compareByQuality(left: PreparedOpportunity, right: PreparedOpportunity) {
+  const rankDiff = getOpportunityRankScore(right) - getOpportunityRankScore(left);
+  if (Math.abs(rankDiff) > 0.001) return rankDiff;
+
+  const deadlineDiff = getDeadlineTimestamp(left.deadline) - getDeadlineTimestamp(right.deadline);
+  if (deadlineDiff !== 0) return deadlineDiff;
+
+  return getDeadlineTimestamp(right.published_at) - getDeadlineTimestamp(left.published_at);
+}
+
+function sortGiveawaysByQuality(opportunities: PreparedOpportunity[]) {
+  return [...opportunities].sort(compareByQuality);
+}
+
 function sortCashGiveaways(opportunities: PreparedOpportunity[]) {
   return [...opportunities].sort((left, right) => {
     const leftAmount = left.amount ?? null;
@@ -261,6 +302,9 @@ function sortCashGiveaways(opportunities: PreparedOpportunity[]) {
       if (rightAmount === null) return -1;
       if (rightAmount !== leftAmount) return rightAmount - leftAmount;
     }
+
+    const qualityDiff = getOpportunityRankScore(right) - getOpportunityRankScore(left);
+    if (Math.abs(qualityDiff) > 0.001) return qualityDiff;
 
     const deadlineDiff = getDeadlineTimestamp(left.deadline) - getDeadlineTimestamp(right.deadline);
     if (deadlineDiff !== 0) return deadlineDiff;
@@ -666,6 +710,10 @@ export default function App() {
 
     if (appliedFilter === 'giveaways' && appliedSecondaryFilter === 'cash') {
       return sortCashGiveaways(filtered);
+    }
+
+    if (appliedFilter === 'giveaways') {
+      return sortGiveawaysByQuality(filtered);
     }
 
     return filtered;
