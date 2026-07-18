@@ -6,7 +6,6 @@ import {
   Alert,
   FlatList,
   Image,
-  InteractionManager,
   Linking,
   Modal,
   Platform,
@@ -635,15 +634,19 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false;
-    const task = InteractionManager.runAfterInteractions(() => {
-      if (cancelled) return;
-      setAppliedFilter(filter);
-      setAppliedSecondaryFilter(activeSecondaryFilter);
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const frameId = requestAnimationFrame(() => {
+      timeoutId = setTimeout(() => {
+        if (cancelled) return;
+        setAppliedFilter(filter);
+        setAppliedSecondaryFilter(activeSecondaryFilter);
+      }, 0);
     });
 
     return () => {
       cancelled = true;
-      task.cancel?.();
+      cancelAnimationFrame(frameId);
+      if (timeoutId) clearTimeout(timeoutId);
     };
   }, [filter, activeSecondaryFilter]);
 
@@ -672,6 +675,8 @@ export default function App() {
     deferredQuery,
     opportunityBuckets,
   ]);
+  const isSwitchingOpportunities =
+    appliedFilter !== filter || appliedSecondaryFilter !== activeSecondaryFilter;
   const pagedOpportunities = useMemo(
     () => visibleOpportunities.slice(0, visibleLimit),
     [visibleLimit, visibleOpportunities],
@@ -967,7 +972,7 @@ export default function App() {
 
         <FlatList
           ref={listRef}
-          data={pagedOpportunities}
+          data={isSwitchingOpportunities ? [] : pagedOpportunities}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
@@ -1142,7 +1147,9 @@ export default function App() {
               <View style={styles.sectionHeading}>
                 <Text style={styles.sectionTitle}>{sectionTitle}</Text>
                 <Text style={styles.resultCount}>
-                  {pagedOpportunities.length}/{visibleOpportunities.length} RESULTS
+                  {isSwitchingOpportunities
+                    ? 'UPDATING'
+                    : `${pagedOpportunities.length}/${visibleOpportunities.length} RESULTS`}
                 </Text>
               </View>
 
@@ -1160,10 +1167,12 @@ export default function App() {
           renderItem={renderOpportunity}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           ListEmptyComponent={
-            loading ? (
+            loading || isSwitchingOpportunities ? (
               <View style={styles.emptyState}>
                 <ActivityIndicator color="#D9FF57" />
-                <Text style={styles.emptyText}>Loading opportunities...</Text>
+                <Text style={styles.emptyText}>
+                  {isSwitchingOpportunities ? 'Updating opportunities...' : 'Loading opportunities...'}
+                </Text>
               </View>
             ) : (
               <View style={styles.emptyState}>
@@ -1175,7 +1184,7 @@ export default function App() {
           }
           ListFooterComponent={
             <View style={styles.footer}>
-              {hasMoreOpportunities && (
+              {!isSwitchingOpportunities && hasMoreOpportunities && (
                 <Pressable
                   accessibilityRole="button"
                   onPress={() =>
