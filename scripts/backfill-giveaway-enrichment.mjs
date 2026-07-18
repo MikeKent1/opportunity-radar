@@ -23,6 +23,7 @@ const setting = (key) => {
 const supabaseUrl = setting('EXPO_PUBLIC_SUPABASE_URL');
 const serviceRoleKey = setting('SUPABASE_SERVICE_ROLE_KEY');
 const limit = Math.max(1, Number(setting('AI_ENRICHMENT_BACKFILL_LIMIT') ?? 80));
+const reprocess = ['1', 'true', 'yes'].includes(String(setting('AI_ENRICHMENT_REPROCESS') ?? '').toLowerCase());
 
 if (!supabaseUrl || !serviceRoleKey) {
   console.log(
@@ -37,7 +38,7 @@ if (!supabaseUrl || !serviceRoleKey) {
 
 const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-const { data, error } = await supabase
+let query = supabase
   .from('opportunities')
   .select(
     'id, source, source_type, category, subcategory, title, organization, summary, deadline, participation_steps, tags, raw_data, clean_summary, enrichment_method',
@@ -45,9 +46,16 @@ const { data, error } = await supabase
   .eq('status', 'active')
   .eq('category', 'giveaways')
   .in('source_type', ['web', 'social'])
-  .or('clean_summary.is.null,enrichment_method.eq.none,enrichment_method.eq.rules_ai_failed')
   .order('published_at', { ascending: false })
   .limit(limit);
+
+if (reprocess) {
+  query = query.eq('enrichment_method', 'ai');
+} else {
+  query = query.or('clean_summary.is.null,enrichment_method.eq.none,enrichment_method.eq.rules_ai_failed');
+}
+
+const { data, error } = await query;
 
 if (error) throw error;
 
@@ -66,6 +74,7 @@ for (const opportunity of data ?? []) {
       eligibility: enrichment.eligibility,
       quality_score: enrichment.quality_score,
       risk_flags: enrichment.risk_flags,
+      quality_notes: enrichment.quality_notes,
       enrichment_method: enrichment.enrichment_method,
       enrichment_reason: enrichment.enrichment_reason,
     })
@@ -80,6 +89,7 @@ console.log(
     providers: ['giveaway-enrichment'],
     imported: updated,
     candidates: data?.length ?? 0,
+    reprocess,
     methods,
   }),
 );

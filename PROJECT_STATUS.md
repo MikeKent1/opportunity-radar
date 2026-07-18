@@ -191,7 +191,11 @@ Recent data quality work:
     `classification_reason`, and `needs_review` on opportunities.
 - AI-assisted giveaway enrichment was added for web/social giveaways.
   - The pipeline can store `clean_summary`, `prize_description`, `eligibility`,
-    `quality_score`, `risk_flags`, `enrichment_method`, and `enrichment_reason`.
+    `quality_score`, `risk_flags`, `quality_notes`, `enrichment_method`, and
+    `enrichment_reason`.
+  - `risk_flags` are reserved for serious uncertainty or user-facing risk.
+  - `quality_notes` track normal listing limitations such as missing rules,
+    vague deadlines, unstated eligibility, or unclear prize value.
   - The mobile app prefers `clean_summary` in cards and details when available.
   - Detail pages show `Prize` and `Eligibility` sections when AI extracted them.
 - Reward backfill now cleans stale generated reward tags for web/social imports.
@@ -209,7 +213,8 @@ Latest checked results:
 npx tsc --noEmit -> passed
 npx expo-doctor -> 21/21 passed
 npm run rewards:audit -> 458 audited, 0 high flagged, 5 medium review candidates
-npm run giveaways:enrich -> 80 active giveaways enriched with AI so far
+npm run giveaways:enrich -> 81 active giveaways enriched with AI so far
+AI enrichment tuning -> avg quality 0.73, 17/81 with risk flags, 72/81 with quality notes
 npm run pipeline:health -> expiredActive: 0
 ```
 

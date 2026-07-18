@@ -31,6 +31,7 @@ function fallbackEnrichment(opportunity) {
     eligibility: null,
     quality_score: 0.6,
     risk_flags: [],
+    quality_notes: [],
     enrichment_method: 'rules',
     enrichment_reason: 'Fallback enrichment used the existing title and summary.',
   };
@@ -56,12 +57,28 @@ function extractJsonFromResponse(payload) {
 
 function normalizeEnrichment(result, fallback) {
   const qualityScore = Number(result?.quality_score);
+  const nonRiskFlags = new Set([
+    'missing_rules',
+    'vague_deadline',
+    'eligibility_not_stated',
+    'thin_listing',
+    'prize_value_unclear',
+  ]);
+  const rawRiskFlags = compactList(result?.risk_flags, 8);
+  const rawQualityNotes = compactList(result?.quality_notes, 8);
+  const riskFlags = rawRiskFlags.filter((flag) => !nonRiskFlags.has(flag));
+  const qualityNotes = compactList([
+    ...rawQualityNotes,
+    ...rawRiskFlags.filter((flag) => nonRiskFlags.has(flag)),
+  ], 6);
+
   return {
     clean_summary: text(result?.clean_summary).slice(0, 320) || fallback.clean_summary,
     prize_description: text(result?.prize_description).slice(0, 180) || fallback.prize_description,
     eligibility: text(result?.eligibility).slice(0, 160) || null,
     quality_score: Number.isFinite(qualityScore) ? Math.max(0, Math.min(1, qualityScore)) : fallback.quality_score,
-    risk_flags: compactList(result?.risk_flags, 6),
+    risk_flags: riskFlags.slice(0, 6),
+    quality_notes: qualityNotes,
     enrichment_method: 'ai',
     enrichment_reason: text(result?.reason).slice(0, 300) || 'AI enriched the giveaway details.',
   };
@@ -83,7 +100,7 @@ export async function enrichGiveawayWithAi(opportunity, options = {}) {
       {
         role: 'system',
         content:
-          'Enrich giveaway listings for Prizen. Extract only facts supported by the provided text. Do not invent eligibility, dates, prize details, or entry requirements. Return valid JSON only.',
+          'Enrich giveaway listings for Prizen. Extract only facts supported by the provided text. Do not invent eligibility, dates, prize details, or entry requirements. Distinguish ordinary missing information from actual risk. Return valid JSON only.',
       },
       {
         role: 'user',
@@ -93,9 +110,12 @@ export async function enrichGiveawayWithAi(opportunity, options = {}) {
             clean_summary: 'One or two plain-English sentences. Max 45 words.',
             prize_description: 'What the winner receives. Max 18 words.',
             eligibility: 'Eligibility/geography/age if explicitly stated, otherwise null.',
-            quality_score: '0 to 1. Higher means clear prize, clear source, low scam/spam risk.',
+            quality_score:
+              '0 to 1. Start around 0.70 for a valid but thin listing. Raise for clear prize/source/deadline/eligibility. Lower below 0.45 only for unclear prize, suspicious claims, spam, or unusable text.',
             risk_flags:
-              'Short flags for problems like unclear_prize, missing_rules, vague_deadline, engagement_bait, crypto_spam, suspicious_claims. Empty array if none.',
+              'Use only for actual user risk or serious uncertainty: unclear_prize, suspicious_claims, engagement_bait, crypto_spam, broken_text, misleading_value, unclear_entry_path. Do not use missing_rules or vague_deadline here unless the listing is otherwise suspicious.',
+            quality_notes:
+              'Non-risk limitations: missing_rules, vague_deadline, eligibility_not_stated, thin_listing, prize_value_unclear. Empty array if none.',
             reason: 'Short internal explanation.',
           },
           opportunity: {
@@ -128,6 +148,10 @@ export async function enrichGiveawayWithAi(opportunity, options = {}) {
               type: 'array',
               items: { type: 'string' },
             },
+            quality_notes: {
+              type: 'array',
+              items: { type: 'string' },
+            },
             reason: { type: 'string' },
           },
           required: [
@@ -136,6 +160,7 @@ export async function enrichGiveawayWithAi(opportunity, options = {}) {
             'eligibility',
             'quality_score',
             'risk_flags',
+            'quality_notes',
             'reason',
           ],
           additionalProperties: false,
