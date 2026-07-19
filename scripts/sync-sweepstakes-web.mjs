@@ -465,6 +465,8 @@ async function normalizeCandidate(candidate) {
     clean_summary: enrichment.clean_summary,
     prize_description: enrichment.prize_description,
     eligibility: enrichment.eligibility,
+    eligible_countries: enrichment.eligible_countries,
+    localities: enrichment.localities,
     quality_score: enrichment.quality_score,
     risk_flags: enrichment.risk_flags,
     quality_notes: enrichment.quality_notes,

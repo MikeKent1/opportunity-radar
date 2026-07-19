@@ -1,5 +1,6 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -39,7 +40,26 @@ import { cleanDisplayText } from './src/utils/displayText';
 const prizenAppIcon = require('./assets/prizen-icon.png');
 const prizenMark = require('./assets/prizen-mark-transparent.png');
 const OPPORTUNITY_PAGE_SIZE = 15;
+const COUNTRY_STORAGE_PREFIX = 'prizen.countryPreference';
 const localLimitingRiskFlags = new Set(['local_use_reward', 'region_limited']);
+const countryOptions = [
+  { code: 'WORLDWIDE', label: 'Worldwide / Any' },
+  { code: 'GR', label: 'Greece' },
+  { code: 'US', label: 'United States' },
+  { code: 'CA', label: 'Canada' },
+  { code: 'GB', label: 'United Kingdom' },
+  { code: 'AU', label: 'Australia' },
+  { code: 'DE', label: 'Germany' },
+  { code: 'FR', label: 'France' },
+  { code: 'NL', label: 'Netherlands' },
+  { code: 'SE', label: 'Sweden' },
+  { code: 'NO', label: 'Norway' },
+  { code: 'FI', label: 'Finland' },
+  { code: 'ES', label: 'Spain' },
+  { code: 'IT', label: 'Italy' },
+  { code: 'IE', label: 'Ireland' },
+  { code: 'NZ', label: 'New Zealand' },
+];
 const legalLinks = [
   { label: 'Privacy Policy', url: 'https://prizen.app/privacy' },
   { label: 'Terms of Service', url: 'https://prizen.app/terms' },
@@ -246,6 +266,14 @@ function getProfileProvider(session: Session) {
   return session.user.app_metadata.provider || session.user.identities?.[0]?.provider || 'google';
 }
 
+function getCountryLabel(countryCode: string | null) {
+  return countryOptions.find((country) => country.code === countryCode)?.label ?? 'Not set';
+}
+
+function countryStorageKey(userId: string) {
+  return `${COUNTRY_STORAGE_PREFIX}:${userId}`;
+}
+
 function getDeadlineTimestamp(value: string | null | undefined) {
   if (!value) return Number.POSITIVE_INFINITY;
   const timestamp = new Date(value).getTime();
@@ -273,6 +301,26 @@ function getRiskPenalty(opportunity: PreparedOpportunity) {
 function isLocallyLimitedOpportunity(opportunity: PreparedOpportunity) {
   const flags = Array.isArray(opportunity.risk_flags) ? opportunity.risk_flags : [];
   return flags.some((flag) => localLimitingRiskFlags.has(flag));
+}
+
+function hasCountryMismatch(opportunity: PreparedOpportunity, countryCode: string | null) {
+  if (!countryCode || countryCode === 'WORLDWIDE') return false;
+  const eligibleCountries = Array.isArray(opportunity.eligible_countries)
+    ? opportunity.eligible_countries.map((country) => country.toUpperCase())
+    : [];
+  if (eligibleCountries.length === 0 || eligibleCountries.includes('WORLDWIDE')) return false;
+  return !eligibleCountries.includes(countryCode);
+}
+
+function shouldHideForLocation(
+  opportunity: PreparedOpportunity,
+  countryCode: string | null,
+  hasQuery: boolean,
+  filter: Filter,
+) {
+  if (hasQuery || filter === 'saved') return false;
+  if (isLocallyLimitedOpportunity(opportunity)) return true;
+  return hasCountryMismatch(opportunity, countryCode);
 }
 
 function getOpportunityRankScore(opportunity: PreparedOpportunity) {
@@ -437,6 +485,9 @@ export default function App() {
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
   const [profileVisible, setProfileVisible] = useState(false);
   const [searchVisible, setSearchVisible] = useState(false);
+  const [countryPickerVisible, setCountryPickerVisible] = useState(false);
+  const [countryPreference, setCountryPreference] = useState<string | null>(null);
+  const [countryPreferenceLoaded, setCountryPreferenceLoaded] = useState(false);
   const [visibleLimit, setVisibleLimit] = useState(OPPORTUNITY_PAGE_SIZE);
   const [opportunityCounts, setOpportunityCounts] =
     useState<OpportunityCounts>(initialOpportunityCounts);
@@ -483,6 +534,34 @@ export default function App() {
   useEffect(() => {
     void fetchSavedOpportunities();
   }, [fetchSavedOpportunities]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!session) {
+      setCountryPreference(null);
+      setCountryPreferenceLoaded(true);
+      setCountryPickerVisible(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setCountryPreferenceLoaded(false);
+    void AsyncStorage.getItem(countryStorageKey(session.user.id)).then((storedCountry) => {
+      if (cancelled) return;
+      const validCountry = countryOptions.some((country) => country.code === storedCountry)
+        ? storedCountry
+        : null;
+      setCountryPreference(validCountry);
+      setCountryPreferenceLoaded(true);
+      setCountryPickerVisible(!validCountry);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [session]);
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
@@ -580,6 +659,16 @@ export default function App() {
     });
   }, []);
 
+  const handleSelectCountry = useCallback(
+    async (countryCode: string) => {
+      if (!session) return;
+      setCountryPreference(countryCode);
+      setCountryPickerVisible(false);
+      await AsyncStorage.setItem(countryStorageKey(session.user.id), countryCode);
+    },
+    [session],
+  );
+
   const preparedOpportunities = useMemo<PreparedOpportunity[]>(
     () =>
       opportunities.map((opportunity) => ({
@@ -587,7 +676,7 @@ export default function App() {
         isGiveaway: isGiveawayOpportunity(opportunity),
         normalizedTags: opportunity.tags.map((tag) => tag.toLocaleLowerCase('en')),
         searchText:
-          `${opportunity.title} ${opportunity.organization} ${opportunity.summary} ${opportunity.clean_summary ?? ''} ${opportunity.prize_description ?? ''} ${opportunity.eligibility ?? ''}`.toLocaleLowerCase(
+          `${opportunity.title} ${opportunity.organization} ${opportunity.summary} ${opportunity.clean_summary ?? ''} ${opportunity.prize_description ?? ''} ${opportunity.eligibility ?? ''} ${(opportunity.eligible_countries ?? []).join(' ')} ${(opportunity.localities ?? []).join(' ')}`.toLocaleLowerCase(
             'en',
           ),
       })),
@@ -626,38 +715,25 @@ export default function App() {
     return buckets;
   }, [preparedOpportunities, savedOpportunityIds]);
 
-  const filterCounts = useMemo<Record<Filter, number>>(
-    () => ({
-      all: opportunityCounts.all || preparedOpportunities.length,
+  const filterCounts = useMemo<Record<Filter, number>>(() => {
+    const countVisible = (filterId: Filter) =>
+      opportunityBuckets[filterId].filter(
+        (opportunity) => !shouldHideForLocation(opportunity, countryPreference, false, filterId),
+      ).length;
+
+    return {
+      all: countVisible('all'),
       saved: savedOpportunityIds.size,
-      giveaways:
-        opportunityCounts.giveaways || preparedOpportunities.filter((item) => item.isGiveaway).length,
-      freetoplay:
-        opportunityCounts.freetoplay ||
-        preparedOpportunities.filter((item) => item.source === 'freetogame').length,
-      launches:
-        opportunityCounts.launches ||
-        preparedOpportunities.filter((item) => item.source === 'producthunt').length,
-      competitions:
-        opportunityCounts.competitions ||
-        preparedOpportunities.filter((item) => item.source === 'kaggle').length,
-      feeds:
-        opportunityCounts.feeds ||
-        preparedOpportunities.filter((item) => item.source === 'rss').length,
-      community:
-        opportunityCounts.community ||
-        preparedOpportunities.filter((item) => item.source === 'reddit').length,
-      grants:
-        opportunityCounts.grants ||
-        preparedOpportunities.filter(
-          (item) => item.source === 'grants' || item.source === 'eufunding',
-        ).length,
-      tenders:
-        opportunityCounts.tenders ||
-        preparedOpportunities.filter((item) => item.source === 'ted').length,
-    }),
-    [opportunityCounts, preparedOpportunities, savedOpportunityIds.size],
-  );
+      giveaways: countVisible('giveaways'),
+      freetoplay: countVisible('freetoplay'),
+      launches: countVisible('launches'),
+      competitions: countVisible('competitions'),
+      feeds: countVisible('feeds'),
+      community: countVisible('community'),
+      grants: countVisible('grants'),
+      tenders: countVisible('tenders'),
+    };
+  }, [countryPreference, opportunityBuckets, savedOpportunityIds.size]);
   const profileName = session ? getProfileName(session) : '';
   const profileAvatarUrl = session ? getProfileAvatarUrl(session) : null;
   const profileProvider = session ? getProfileProvider(session) : 'google';
@@ -704,19 +780,18 @@ export default function App() {
   const visibleOpportunities = useMemo(() => {
     const normalizedQuery = deferredQuery.trim().toLocaleLowerCase('en');
     const sourceOpportunities = opportunityBuckets[appliedFilter];
+    const hasNormalizedQuery = normalizedQuery.length > 0;
 
     const filtered = sourceOpportunities.filter((opportunity) => {
       const matchesSecondary =
         !secondaryFilters[appliedFilter] ||
         matchesSecondaryFilter(opportunity, appliedFilter, appliedSecondaryFilter);
       const shouldHideLocalLimited =
-        !normalizedQuery &&
-        appliedFilter !== 'saved' &&
-        isLocallyLimitedOpportunity(opportunity);
+        shouldHideForLocation(opportunity, countryPreference, hasNormalizedQuery, appliedFilter);
       return (
         matchesSecondary &&
         !shouldHideLocalLimited &&
-        (!normalizedQuery || opportunity.searchText.includes(normalizedQuery))
+        (!hasNormalizedQuery || opportunity.searchText.includes(normalizedQuery))
       );
     });
 
@@ -732,6 +807,7 @@ export default function App() {
   }, [
     appliedFilter,
     appliedSecondaryFilter,
+    countryPreference,
     deferredQuery,
     opportunityBuckets,
   ]);
@@ -874,6 +950,20 @@ export default function App() {
                   <Text numberOfLines={1} style={styles.profileMetaValue}>
                     {session.user.id}
                   </Text>
+                  <Text style={styles.settingsLabel}>Country</Text>
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => setCountryPickerVisible(true)}
+                    style={({ pressed }) => [
+                      styles.countryPreferenceButton,
+                      pressed && styles.profileButtonPressed,
+                    ]}
+                  >
+                    <Text style={styles.countryPreferenceText}>
+                      {getCountryLabel(countryPreference)}
+                    </Text>
+                    <Text style={styles.countryPreferenceAction}>Change</Text>
+                  </Pressable>
                   <Text style={styles.settingsLabel}>Member since</Text>
                   <Text style={styles.profileMetaValue}>
                     {formatDetailDate(session.user.created_at)}
@@ -913,6 +1003,76 @@ export default function App() {
                   )}
                 </Pressable>
               </View>
+            </View>
+          </View>
+        </Modal>
+
+        <Modal
+          animationType="fade"
+          transparent
+          visible={Boolean(session) && countryPreferenceLoaded && countryPickerVisible}
+          onRequestClose={() => {
+            if (countryPreference) setCountryPickerVisible(false);
+          }}
+        >
+          <View style={styles.profileOverlay}>
+            {countryPreference && (
+              <Pressable
+                style={styles.profileBackdrop}
+                onPress={() => setCountryPickerVisible(false)}
+              />
+            )}
+            <View style={styles.countrySheet}>
+              <View style={styles.profileSheetTop}>
+                <Text style={styles.profileSheetTitle}>Your country</Text>
+                {countryPreference && (
+                  <Pressable
+                    accessibilityLabel="Close country selector"
+                    accessibilityRole="button"
+                    hitSlop={10}
+                    onPress={() => setCountryPickerVisible(false)}
+                    style={styles.detailCloseButton}
+                  >
+                    <Text style={styles.detailCloseText}>Γ—</Text>
+                  </Pressable>
+                )}
+              </View>
+              <Text style={styles.countryIntro}>
+                Prizen will hide giveaways that are only useful in another country or a specific local area.
+              </Text>
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.countryList}
+              >
+                {countryOptions.map((country) => {
+                  const active = countryPreference === country.code;
+                  return (
+                    <Pressable
+                      key={country.code}
+                      accessibilityRole="button"
+                      onPress={() => handleSelectCountry(country.code)}
+                      style={({ pressed }) => [
+                        styles.countryOption,
+                        active && styles.countryOptionActive,
+                        pressed && styles.profileButtonPressed,
+                      ]}
+                    >
+                      <View>
+                        <Text
+                          style={[
+                            styles.countryOptionLabel,
+                            active && styles.countryOptionLabelActive,
+                          ]}
+                        >
+                          {country.label}
+                        </Text>
+                        <Text style={styles.countryOptionCode}>{country.code}</Text>
+                      </View>
+                      {active && <Text style={styles.countryOptionCheck}>✓</Text>}
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
             </View>
           </View>
         </Modal>
@@ -1675,6 +1835,54 @@ const styles = StyleSheet.create({
     paddingTop: 2,
   },
   profileMetaValue: { color: '#A8B6B4', fontSize: 12, fontWeight: '700', marginTop: 6 },
+  countryPreferenceButton: {
+    minHeight: 44,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#223032',
+    backgroundColor: '#10191A',
+    paddingHorizontal: 12,
+    marginTop: 7,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  countryPreferenceText: { flex: 1, color: '#DCE8E5', fontSize: 13, fontWeight: '800' },
+  countryPreferenceAction: { color: '#D9FF57', fontSize: 12, fontWeight: '900' },
+  countrySheet: {
+    maxHeight: '78%',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#253537',
+    backgroundColor: '#0A1213',
+    padding: 12,
+  },
+  countryIntro: {
+    color: '#A8B6B4',
+    fontSize: 13,
+    lineHeight: 19,
+    paddingHorizontal: 6,
+    marginTop: 8,
+  },
+  countryList: { gap: 8, paddingTop: 14, paddingBottom: 4 },
+  countryOption: {
+    minHeight: 52,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#223032',
+    backgroundColor: '#10191A',
+    paddingHorizontal: 13,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  countryOptionActive: { borderColor: '#D9FF57', backgroundColor: '#172218' },
+  countryOptionLabel: { color: '#DCE8E5', fontSize: 14, fontWeight: '900' },
+  countryOptionLabelActive: { color: '#D9FF57' },
+  countryOptionCode: { color: '#718082', fontSize: 10, fontWeight: '900', marginTop: 3 },
+  countryOptionCheck: { color: '#D9FF57', fontSize: 18, fontWeight: '900' },
   legalLinks: {
     borderTopWidth: 1,
     borderTopColor: '#223032',

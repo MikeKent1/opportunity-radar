@@ -22,6 +22,82 @@ function compactList(values, limit = 8) {
   return [...new Set((values ?? []).map(text).filter(Boolean))].slice(0, limit);
 }
 
+const countryAliases = new Map([
+  ['australia', 'AU'],
+  ['canada', 'CA'],
+  ['greece', 'GR'],
+  ['hellas', 'GR'],
+  ['united kingdom', 'GB'],
+  ['uk', 'GB'],
+  ['great britain', 'GB'],
+  ['ireland', 'IE'],
+  ['united states', 'US'],
+  ['united states of america', 'US'],
+  ['usa', 'US'],
+  ['u.s.', 'US'],
+  ['u.s.a.', 'US'],
+]);
+
+function normalizeCountryCode(value) {
+  const normalized = lower(value).replace(/\s+/g, ' ');
+  if (!normalized) return '';
+  if (normalized === 'worldwide' || normalized === 'global' || normalized === 'international') {
+    return 'WORLDWIDE';
+  }
+  if (/^[a-z]{2}$/i.test(text(value))) return text(value).toUpperCase();
+  return countryAliases.get(normalized) ?? '';
+}
+
+function compactCountryList(values) {
+  return compactList(values, 12)
+    .map(normalizeCountryCode)
+    .filter(Boolean)
+    .slice(0, 8);
+}
+
+function buildSourceText(opportunity) {
+  const raw = opportunity?.raw_data && typeof opportunity.raw_data === 'object' ? opportunity.raw_data : {};
+  return cleanText([
+    opportunity?.title,
+    opportunity?.summary,
+    raw.details,
+    raw.detailPageText,
+    raw.description,
+  ].join(' '));
+}
+
+function detectLocalUse(textValue) {
+  const value = lower(textValue);
+  return (
+    /\b(local businesses?|local partners?|local favourites?|local favorites?|specific location|pickup only|in-store only|local pickup)\b/i.test(
+      value,
+    ) ||
+    /\b(unlimited monthly pass|monthly pass|class pass|classes?|water park passes?|venue passes?|admission tickets?|fitness pass|gift card to [a-z0-9 '&.-]+)\b/i.test(
+      value,
+    ) ||
+    /\b(barrie|ontario|waikiki|honolulu)\b/i.test(value) &&
+      /\b(location|local|pass|passes|classes?|tickets?|gift card)\b/i.test(value)
+  );
+}
+
+function detectCountryCodes(textValue) {
+  const value = lower(textValue);
+  const countries = [];
+  if (/\b(canada|ontario|barrie)\b/i.test(value)) countries.push('CA');
+  if (/\b(united states|usa|u\.s\.|u\.s\.a\.|us residents?)\b/i.test(value)) countries.push('US');
+  if (/\b(united kingdom|uk residents?|great britain)\b/i.test(value)) countries.push('GB');
+  return [...new Set(countries)];
+}
+
+function detectLocalities(textValue) {
+  const value = lower(textValue);
+  const localities = [];
+  if (/\bbarrie\b/i.test(value)) localities.push('Barrie, Ontario');
+  if (/\bontario\b/i.test(value) && !localities.includes('Barrie, Ontario')) localities.push('Ontario');
+  if (/\bhonolulu|waikiki\b/i.test(value)) localities.push('Honolulu, Hawaii');
+  return localities;
+}
+
 function fallbackEnrichment(opportunity) {
   const summary = cleanText(opportunity?.summary || opportunity?.title).slice(0, 280);
 
@@ -29,6 +105,8 @@ function fallbackEnrichment(opportunity) {
     clean_summary: summary,
     prize_description: cleanText(opportunity?.title).slice(0, 160),
     eligibility: null,
+    eligible_countries: [],
+    localities: [],
     quality_score: 0.6,
     risk_flags: [],
     quality_notes: [],
@@ -55,7 +133,7 @@ function extractJsonFromResponse(payload) {
   return content.find((item) => item?.type === 'output_text')?.text ?? '';
 }
 
-function normalizeEnrichment(result, fallback) {
+function normalizeEnrichment(result, fallback, opportunity) {
   const qualityScore = Number(result?.quality_score);
   const nonRiskFlags = new Set([
     'missing_rules',
@@ -66,17 +144,39 @@ function normalizeEnrichment(result, fallback) {
   ]);
   const rawRiskFlags = compactList(result?.risk_flags, 8);
   const rawQualityNotes = compactList(result?.quality_notes, 8);
+  const sourceText = buildSourceText(opportunity);
+  const localUse = detectLocalUse(sourceText);
   const riskFlags = rawRiskFlags.filter((flag) => !nonRiskFlags.has(flag));
+  if (localUse && !riskFlags.includes('local_use_reward')) riskFlags.push('local_use_reward');
   const qualityNotes = compactList([
     ...rawQualityNotes,
     ...rawRiskFlags.filter((flag) => nonRiskFlags.has(flag)),
+    ...(localUse ? ['local_details_unclear'] : []),
   ], 6);
+  const eligibleCountries = compactCountryList([
+    ...(result?.eligible_countries ?? []),
+    ...detectCountryCodes(sourceText),
+  ]);
+  const localities = compactList([
+    ...(result?.localities ?? []),
+    ...detectLocalities(sourceText),
+  ], 8).map((item) => item.slice(0, 80));
+  const eligibility =
+    text(result?.eligibility).slice(0, 160) ||
+    (localUse
+      ? `Local-use reward${localities.length ? ` in ${localities.slice(0, 2).join(', ')}` : ''}; formal eligibility is not stated.`
+      : null);
+  const normalizedQualityScore = Number.isFinite(qualityScore)
+    ? Math.max(0, Math.min(1, qualityScore))
+    : fallback.quality_score;
 
   return {
     clean_summary: text(result?.clean_summary).slice(0, 320) || fallback.clean_summary,
     prize_description: text(result?.prize_description).slice(0, 180) || fallback.prize_description,
-    eligibility: text(result?.eligibility).slice(0, 160) || null,
-    quality_score: Number.isFinite(qualityScore) ? Math.max(0, Math.min(1, qualityScore)) : fallback.quality_score,
+    eligibility,
+    eligible_countries: eligibleCountries,
+    localities,
+    quality_score: localUse ? Math.min(normalizedQualityScore, 0.55) : normalizedQualityScore,
     risk_flags: riskFlags.slice(0, 6),
     quality_notes: qualityNotes,
     enrichment_method: 'ai',
@@ -110,6 +210,10 @@ export async function enrichGiveawayWithAi(opportunity, options = {}) {
             clean_summary: 'One or two plain-English sentences. Max 45 words.',
             prize_description: 'What the winner receives. Max 18 words.',
             eligibility: 'Eligibility/geography/age if explicitly stated, otherwise null.',
+            eligible_countries:
+              'Array of ISO 3166-1 alpha-2 country codes explicitly eligible or strongly implied by local prize usability. Use WORLDWIDE only when worldwide/global/international entry is explicitly stated. Empty array when unknown.',
+            localities:
+              'Array of city/state/province/venue/service-area names for local-use prizes, pickup-only rewards, or region-specific rewards. Empty array when none.',
             quality_score:
               '0 to 1. Start around 0.70 for a valid but thin listing. Raise for clear prize/source/deadline/eligibility. Lower local-only/local-use rewards to around 0.35-0.55 unless the audience is clearly broad. Lower below 0.45 for unclear prize, suspicious claims, spam, unusable text, or rewards most users cannot use.',
             risk_flags:
@@ -143,6 +247,14 @@ export async function enrichGiveawayWithAi(opportunity, options = {}) {
             clean_summary: { type: 'string' },
             prize_description: { type: 'string' },
             eligibility: { type: ['string', 'null'] },
+            eligible_countries: {
+              type: 'array',
+              items: { type: 'string' },
+            },
+            localities: {
+              type: 'array',
+              items: { type: 'string' },
+            },
             quality_score: { type: 'number', minimum: 0, maximum: 1 },
             risk_flags: {
               type: 'array',
@@ -158,6 +270,8 @@ export async function enrichGiveawayWithAi(opportunity, options = {}) {
             'clean_summary',
             'prize_description',
             'eligibility',
+            'eligible_countries',
+            'localities',
             'quality_score',
             'risk_flags',
             'quality_notes',
@@ -189,7 +303,7 @@ export async function enrichGiveawayWithAi(opportunity, options = {}) {
 
     const json = await response.json();
     const content = extractJsonFromResponse(json);
-    return normalizeEnrichment(JSON.parse(content), fallback);
+    return normalizeEnrichment(JSON.parse(content), fallback, opportunity);
   } catch (error) {
     return {
       ...fallback,

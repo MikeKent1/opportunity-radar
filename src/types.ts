@@ -29,6 +29,8 @@ export type Opportunity = {
   quality_score?: number | null;
   risk_flags?: string[] | null;
   quality_notes?: string[] | null;
+  eligible_countries?: string[] | null;
+  localities?: string[] | null;
   url: string;
   participation_url?: string | null;
   image_url: string | null;
