@@ -935,21 +935,7 @@ export default function App() {
                     </View>
                   </View>
                 </View>
-                <View style={styles.settingsStats}>
-                  <View style={styles.settingsStat}>
-                    <Text style={styles.settingsStatValue}>{savedOpportunityIds.size}</Text>
-                    <Text style={styles.settingsStatLabel}>Saved</Text>
-                  </View>
-                  <View style={styles.settingsStat}>
-                    <Text style={styles.settingsStatValue}>{opportunities.length}</Text>
-                    <Text style={styles.settingsStatLabel}>Active</Text>
-                  </View>
-                </View>
                 <View style={styles.profileMeta}>
-                  <Text style={styles.settingsLabel}>User ID</Text>
-                  <Text numberOfLines={1} style={styles.profileMetaValue}>
-                    {session.user.id}
-                  </Text>
                   <Text style={styles.settingsLabel}>Country</Text>
                   <Pressable
                     accessibilityRole="button"
@@ -964,10 +950,6 @@ export default function App() {
                     </Text>
                     <Text style={styles.countryPreferenceAction}>Change</Text>
                   </Pressable>
-                  <Text style={styles.settingsLabel}>Member since</Text>
-                  <Text style={styles.profileMetaValue}>
-                    {formatDetailDate(session.user.created_at)}
-                  </Text>
                 </View>
                 <View style={styles.legalLinks}>
                   {legalLinks.map((item) => (
@@ -1817,24 +1799,12 @@ const styles = StyleSheet.create({
     marginTop: 9,
   },
   providerBadgeText: { color: '#D9FF57', fontSize: 9, fontWeight: '900', letterSpacing: 0.8 },
-  settingsStats: { flexDirection: 'row', gap: 10, marginTop: 18 },
-  settingsStat: {
-    flex: 1,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#223032',
-    backgroundColor: '#10191A',
-    padding: 12,
-  },
-  settingsStatValue: { color: '#D9FF57', fontSize: 20, fontWeight: '900' },
-  settingsStatLabel: { color: '#7E8C8E', fontSize: 11, fontWeight: '800', marginTop: 3 },
   profileMeta: {
     borderTopWidth: 1,
     borderTopColor: '#223032',
     marginTop: 18,
     paddingTop: 2,
   },
-  profileMetaValue: { color: '#A8B6B4', fontSize: 12, fontWeight: '700', marginTop: 6 },
   countryPreferenceButton: {
     minHeight: 44,
     borderRadius: 12,
