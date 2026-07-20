@@ -4,6 +4,7 @@ import { Opportunity } from '../types';
 
 type LoadResult = {
   data: Opportunity[];
+  feedVersion: string | null;
   notice: string | null;
 };
 
@@ -35,6 +36,7 @@ export async function loadOpportunities(): Promise<LoadResult> {
   if (!isSupabaseConfigured) {
     return {
       data: demoOpportunities,
+      feedVersion: null,
       notice: 'Supabase is not configured. Showing demo data for now.',
     };
   }
@@ -42,7 +44,7 @@ export async function loadOpportunities(): Promise<LoadResult> {
   const { data, error } = await supabase
     .from('opportunities')
     .select(
-      'id, external_id, source, source_type, category, subcategory, title, organization, summary, clean_summary, prize_description, eligibility, quality_score, risk_flags, quality_notes, eligible_countries, excluded_countries, eligible_regions, localities, audience_tags, eligibility_flags, minimum_age, url, participation_url, image_url, amount, currency, deadline, expires_at, participation_steps, tags, status, published_at, created_at, updated_at',
+      'id, external_id, source, source_type, category, subcategory, title, organization, clean_summary, quality_score, risk_flags, quality_notes, eligible_countries, excluded_countries, eligible_regions, localities, audience_tags, eligibility_flags, minimum_age, url, participation_url, image_url, amount, currency, deadline, expires_at, tags, status, published_at, created_at, updated_at',
     )
     .eq('status', 'active')
     .order('published_at', { ascending: false })
@@ -52,11 +54,76 @@ export async function loadOpportunities(): Promise<LoadResult> {
     console.warn('Supabase opportunities query failed:', error.message);
     return {
       data: demoOpportunities,
+      feedVersion: null,
       notice: 'Run supabase/schema.sql in the SQL Editor. Demo data is shown until then.',
     };
   }
 
-  return { data: (data ?? []) as Opportunity[], notice: null };
+  const opportunities = (data ?? []).map((item) => ({
+    ...item,
+    summary: item.clean_summary ?? '',
+  }));
+
+  const feedVersion = opportunities.reduce<string | null>((latest, item) => {
+    if (!item.updated_at) return latest;
+    return !latest || item.updated_at > latest ? item.updated_at : latest;
+  }, null);
+
+  return { data: opportunities as Opportunity[], feedVersion, notice: null };
+}
+
+export async function loadOpportunityFeedVersion(): Promise<{
+  data: string | null;
+  error: string | null;
+}> {
+  if (!isSupabaseConfigured) {
+    return { data: null, error: null };
+  }
+
+  const { data, error } = await supabase
+    .from('opportunities')
+    .select('updated_at')
+    .eq('status', 'active')
+    .order('published_at', { ascending: false })
+    .limit(1000);
+
+  if (error) {
+    return { data: null, error: error.message };
+  }
+
+  const feedVersion = (data ?? []).reduce<string | null>((latest, item) => {
+    const updatedAt = String(item.updated_at ?? '');
+    if (!updatedAt) return latest;
+    return !latest || updatedAt > latest ? updatedAt : latest;
+  }, null);
+
+  return { data: feedVersion, error: null };
+}
+
+export async function loadOpportunityDetail(opportunityId: string): Promise<{
+  data: Partial<Opportunity> | null;
+  error: string | null;
+}> {
+  if (!isSupabaseConfigured) {
+    return {
+      data: demoOpportunities.find((item) => item.id === opportunityId) ?? null,
+      error: null,
+    };
+  }
+
+  const { data, error } = await supabase
+    .from('opportunities')
+    .select(
+      'id, summary, clean_summary, prize_description, eligibility, participation_steps, quality_score, risk_flags, quality_notes, eligible_countries, excluded_countries, eligible_regions, localities, audience_tags, eligibility_flags, minimum_age, updated_at',
+    )
+    .eq('id', opportunityId)
+    .single();
+
+  if (error) {
+    return { data: null, error: error.message };
+  }
+
+  return { data: data as Partial<Opportunity>, error: null };
 }
 
 async function countActiveOpportunities(applyFilter?: (query: any) => any) {

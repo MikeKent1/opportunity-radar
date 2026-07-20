@@ -29,6 +29,8 @@ import { Opportunity, OpportunitySource } from './src/types';
 import {
   loadSavedOpportunityIds,
   loadOpportunities,
+  loadOpportunityDetail,
+  loadOpportunityFeedVersion,
   saveOpportunity,
   subscribeToOpportunities,
   unsaveOpportunity,
@@ -575,11 +577,13 @@ export default function App() {
   const [profileTypePreferenceLoaded, setProfileTypePreferenceLoaded] = useState(false);
   const [visibleLimit, setVisibleLimit] = useState(OPPORTUNITY_PAGE_SIZE);
   const listRef = useRef<FlatList<PreparedOpportunity>>(null);
+  const latestFeedVersionRef = useRef<string | null>(null);
 
   const fetchOpportunities = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
 
     const result = await loadOpportunities();
+    latestFeedVersionRef.current = result.feedVersion;
     setOpportunities(result.data);
     setNotice(result.notice);
     setLoading(false);
@@ -601,12 +605,45 @@ export default function App() {
     setSavedOpportunityIds(result.data);
   }, [session]);
 
+  const handleSelectOpportunity = useCallback((opportunity: Opportunity) => {
+    setSelectedOpportunity(opportunity);
+    void loadOpportunityDetail(opportunity.id).then((result) => {
+      if (result.error || !result.data) {
+        if (result.error) console.warn('Supabase opportunity detail query failed:', result.error);
+        return;
+      }
+      setSelectedOpportunity((current) =>
+        current?.id === opportunity.id ? { ...current, ...result.data } : current,
+      );
+      setOpportunities((current) =>
+        current.map((item) =>
+          item.id === opportunity.id ? { ...item, ...result.data } : item,
+        ),
+      );
+    });
+  }, []);
+
   const handleRefresh = useCallback(() => {
     setRefreshing(true);
-    void Promise.all([fetchOpportunities(true), fetchSavedOpportunities()]).finally(() => {
+    void (async () => {
+      const [versionResult] = await Promise.all([
+        loadOpportunityFeedVersion(),
+        fetchSavedOpportunities(),
+      ]);
+      if (
+        !versionResult.error &&
+        versionResult.data &&
+        latestFeedVersionRef.current === versionResult.data &&
+        opportunities.length > 0
+      ) {
+        setRefreshing(false);
+        return;
+      }
+      await fetchOpportunities(true);
+    })().finally(() => {
       setRefreshing(false);
     });
-  }, [fetchOpportunities, fetchSavedOpportunities]);
+  }, [fetchOpportunities, fetchSavedOpportunities, opportunities.length]);
 
   useEffect(() => {
     void fetchOpportunities();
@@ -1033,11 +1070,17 @@ export default function App() {
         isSaved={savedOpportunityIds.has(item.id)}
         isSaving={savingOpportunityIds.has(item.id)}
         onToggleSave={() => handleToggleSave(item.id)}
-        onPress={() => setSelectedOpportunity(item)}
+        onPress={() => handleSelectOpportunity(item)}
         onOpenExternal={() => handleOpenOpportunity(item)}
       />
     ),
-    [handleOpenOpportunity, handleToggleSave, savedOpportunityIds, savingOpportunityIds],
+    [
+      handleOpenOpportunity,
+      handleSelectOpportunity,
+      handleToggleSave,
+      savedOpportunityIds,
+      savingOpportunityIds,
+    ],
   );
 
   if (!authReady) {

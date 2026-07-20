@@ -52,7 +52,7 @@ function OpportunityCardComponent({
   const isFeed = opportunity.source === 'rss';
   const isCommunity = opportunity.source === 'reddit';
   const isSocial = opportunity.source_type === 'social';
-  const displaySummary = opportunity.clean_summary || opportunity.summary;
+  const displaySummary = opportunity.clean_summary || opportunity.summary || opportunity.title;
   const sourceLabel =
     isSocial
       ? `INSTAGRAM @${opportunity.source}`.toUpperCase()
