@@ -7,6 +7,7 @@ import {
   Alert,
   FlatList,
   Image,
+  InteractionManager,
   Linking,
   Modal,
   Platform,
@@ -611,15 +612,17 @@ export default function App() {
     setSelectedOpportunity(cachedDetail ? { ...opportunity, ...cachedDetail } : opportunity);
     if (cachedDetail) return;
 
-    void loadOpportunityDetail(opportunity.id).then((result) => {
-      if (result.error || !result.data) {
-        if (result.error) console.warn('Supabase opportunity detail query failed:', result.error);
-        return;
-      }
-      detailCacheRef.current.set(opportunity.id, result.data);
-      setSelectedOpportunity((current) =>
-        current?.id === opportunity.id ? { ...current, ...result.data } : current,
-      );
+    InteractionManager.runAfterInteractions(() => {
+      void loadOpportunityDetail(opportunity.id).then((result) => {
+        if (result.error || !result.data) {
+          if (result.error) console.warn('Supabase opportunity detail query failed:', result.error);
+          return;
+        }
+        detailCacheRef.current.set(opportunity.id, result.data);
+        setSelectedOpportunity((current) =>
+          current?.id === opportunity.id ? { ...current, ...result.data } : current,
+        );
+      });
     });
   }, []);
 
@@ -1389,7 +1392,7 @@ export default function App() {
         </Modal>
 
         <Modal
-          animationType="slide"
+          animationType="fade"
           transparent
           visible={Boolean(selectedOpportunity)}
           onRequestClose={() => setSelectedOpportunity(null)}
