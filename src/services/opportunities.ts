@@ -64,10 +64,12 @@ export async function loadOpportunities(): Promise<LoadResult> {
     summary: item.clean_summary ?? '',
   }));
 
-  const feedVersion = opportunities.reduce<string | null>((latest, item) => {
-    if (!item.updated_at) return latest;
-    return !latest || item.updated_at > latest ? item.updated_at : latest;
-  }, null);
+  const firstOpportunity = opportunities[0];
+  const feedVersion = firstOpportunity
+    ? [firstOpportunity.id, firstOpportunity.published_at, firstOpportunity.updated_at]
+        .filter(Boolean)
+        .join(':')
+    : null;
 
   return { data: opportunities as Opportunity[], feedVersion, notice: null };
 }
@@ -82,20 +84,19 @@ export async function loadOpportunityFeedVersion(): Promise<{
 
   const { data, error } = await supabase
     .from('opportunities')
-    .select('updated_at')
+    .select('id,published_at,updated_at')
     .eq('status', 'active')
     .order('published_at', { ascending: false })
-    .limit(1000);
+    .limit(1)
+    .maybeSingle();
 
   if (error) {
     return { data: null, error: error.message };
   }
 
-  const feedVersion = (data ?? []).reduce<string | null>((latest, item) => {
-    const updatedAt = String(item.updated_at ?? '');
-    if (!updatedAt) return latest;
-    return !latest || updatedAt > latest ? updatedAt : latest;
-  }, null);
+  const feedVersion = data
+    ? [data.id, data.published_at, data.updated_at].filter(Boolean).join(':')
+    : null;
 
   return { data: feedVersion, error: null };
 }

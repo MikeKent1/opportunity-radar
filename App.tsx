@@ -578,6 +578,7 @@ export default function App() {
   const [visibleLimit, setVisibleLimit] = useState(OPPORTUNITY_PAGE_SIZE);
   const listRef = useRef<FlatList<PreparedOpportunity>>(null);
   const latestFeedVersionRef = useRef<string | null>(null);
+  const detailCacheRef = useRef<Map<string, Partial<Opportunity>>>(new Map());
 
   const fetchOpportunities = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -606,19 +607,18 @@ export default function App() {
   }, [session]);
 
   const handleSelectOpportunity = useCallback((opportunity: Opportunity) => {
-    setSelectedOpportunity(opportunity);
+    const cachedDetail = detailCacheRef.current.get(opportunity.id);
+    setSelectedOpportunity(cachedDetail ? { ...opportunity, ...cachedDetail } : opportunity);
+    if (cachedDetail) return;
+
     void loadOpportunityDetail(opportunity.id).then((result) => {
       if (result.error || !result.data) {
         if (result.error) console.warn('Supabase opportunity detail query failed:', result.error);
         return;
       }
+      detailCacheRef.current.set(opportunity.id, result.data);
       setSelectedOpportunity((current) =>
         current?.id === opportunity.id ? { ...current, ...result.data } : current,
-      );
-      setOpportunities((current) =>
-        current.map((item) =>
-          item.id === opportunity.id ? { ...item, ...result.data } : item,
-        ),
       );
     });
   }, []);
@@ -639,6 +639,7 @@ export default function App() {
         setRefreshing(false);
         return;
       }
+      setRefreshing(false);
       await fetchOpportunities(true);
     })().finally(() => {
       setRefreshing(false);
