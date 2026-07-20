@@ -17,6 +17,7 @@ export function cleanDisplayText(value: string | null | undefined) {
     .replace(/&ndash;/g, '-')
     .replace(/&mdash;/g, '-')
     .replace(/^\d{10}\s+/, '')
+    .replace(/\b\d{1,3}\s+days?\s+left\b/gi, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }

@@ -9,6 +9,7 @@ function cleanText(value) {
     .replace(/<[^>]+>/g, ' ')
     .replace(/\b(?:loading|decoding|width|height|src|class|alt|title|data-[\w-]+)=["'][^"']*["']/gi, ' ')
     .replace(/^\d{10}\s+/, '')
+    .replace(/\b\d{1,3}\s+days?\s+left\b/gi, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
