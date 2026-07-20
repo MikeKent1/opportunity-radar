@@ -1397,7 +1397,11 @@ export default function App() {
           <View style={styles.detailOverlay}>
             <View style={styles.detailSheet}>
               {selectedOpportunity && (
-                <ScrollView showsVerticalScrollIndicator={false}>
+                <>
+                <ScrollView
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={styles.detailScrollContent}
+                >
                   <View style={styles.detailHeader}>
                     <View style={styles.detailHeaderText}>
                       <Text style={styles.detailSource}>
@@ -1488,7 +1492,8 @@ export default function App() {
                     </View>
                   )}
 
-                  <View style={styles.detailActions}>
+                </ScrollView>
+                <View style={styles.detailActions}>
                     <Pressable
                       accessibilityRole="button"
                       disabled={savingOpportunityIds.has(selectedOpportunity.id)}
@@ -1514,8 +1519,8 @@ export default function App() {
                     >
                       <Text style={styles.detailPrimaryText}>Open link</Text>
                     </Pressable>
-                  </View>
-                </ScrollView>
+                </View>
+                </>
               )}
             </View>
           </View>
@@ -1983,15 +1988,17 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.62)',
   },
   detailSheet: {
-    maxHeight: '88%',
+    height: '88%',
     borderTopLeftRadius: 22,
     borderTopRightRadius: 22,
     borderWidth: 1,
     borderColor: '#253537',
     backgroundColor: '#0E1718',
-    padding: 20,
-    paddingBottom: 24,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: Platform.OS === 'android' ? 18 : 24,
   },
+  detailScrollContent: { paddingBottom: 18 },
   detailHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -2068,7 +2075,15 @@ const styles = StyleSheet.create({
     borderColor: '#2A3839',
   },
   detailTagText: { color: '#899797', fontSize: 10, fontWeight: '800' },
-  detailActions: { flexDirection: 'row', gap: 10, marginTop: 24 },
+  detailActions: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingTop: 14,
+    paddingBottom: Platform.OS === 'android' ? 16 : 4,
+    borderTopWidth: 1,
+    borderTopColor: '#253537',
+    backgroundColor: '#0E1718',
+  },
   detailPrimaryButton: {
     flex: 1.4,
     height: 48,
