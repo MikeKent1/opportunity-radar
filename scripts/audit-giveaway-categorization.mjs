@@ -187,7 +187,7 @@ function auditOpportunity(opportunity) {
   const classifier = classifyRewardType(opportunity);
   const confidence = Number(opportunity.classification_confidence);
   const isHighConfidenceAi =
-    opportunity.classification_method === 'ai' && Number.isFinite(confidence) && confidence >= 0.85;
+    opportunity.classification_method === 'ai' && Number.isFinite(confidence) && confidence >= 0.8;
   const issues = [];
 
   if (opportunity.classification_method !== 'ai' && current !== classifier) {

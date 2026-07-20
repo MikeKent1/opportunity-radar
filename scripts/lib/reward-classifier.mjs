@@ -64,6 +64,47 @@ const hasTravelPrize = (haystack) =>
   /\b(night stay|hotel stay|stay for two|luxury escape|dream trip|around the world cruise)\b/i.test(
     haystack,
   );
+const hasPhysicalPrize = (haystack) =>
+  includesAny(haystack, [
+    'appliance',
+    'bag',
+    'bike',
+    'bicycle',
+    'book',
+    'books',
+    'bundle',
+    'camera',
+    'car',
+    'chair',
+    'cooler',
+    'controller',
+    'equipment',
+    'football tackle dummy',
+    'gear',
+    'grill',
+    'hardware',
+    'headset',
+    'jacket',
+    'keyboard',
+    'laptop',
+    'merch',
+    'merchandise',
+    'microphone',
+    'monitor',
+    'motorcycle',
+    'mouse',
+    'new champro',
+    'pc build',
+    'prize pack',
+    'shirt',
+    'speaker',
+    'sports equipment',
+    'swag',
+    'tackle dummy',
+    'truck',
+    'vehicle',
+    'watercraft',
+  ]);
 const hasLocalUseReward = (haystack) =>
   /\b(local businesses?|local partners?|local favourites?|barrie location|specific location|pickup only|in-store only|local pickup)\b/i.test(
     haystack,
@@ -232,10 +273,6 @@ export function classifyRewardType(opportunity) {
     return 'gift_card';
   }
 
-  if (hasCashPayoutSignal(haystack) || (hasShortMoneyAmount(haystack) && !hasPrizeValueLanguage(haystack))) {
-    return 'cash';
-  }
-
   if (
     includesAny(haystack, [
       'trip',
@@ -266,54 +303,12 @@ export function classifyRewardType(opportunity) {
     return 'trip';
   }
 
-  if (
-    includesAny(haystack, [
-      'keyboard',
-      'mouse',
-      'headset',
-      'monitor',
-      'gpu',
-      'graphics card',
-      'laptop',
-      'pc build',
-      'gaming pc',
-      'gaming reasons',
-      'hand-painted',
-      'oled monitor',
-      'rtx',
-      'setup',
-      'signed panel',
-      'system',
-      'ultra 5',
-      'chair',
-      'cooler',
-      'controller',
-      'wheel',
-      'microphone',
-      'camera',
-      'car',
-      'cars',
-      'truck',
-      'motorcycle',
-      'motorbike',
-      'bike',
-      'bicycle',
-      'vehicle',
-      'appliance',
-      'speaker',
-      'speakers',
-      'hardware',
-      'maingear',
-      'microcenter',
-      'msi',
-      'nvidia',
-      'razer',
-      'corsair',
-      'logitech',
-      'steelseries',
-    ])
-  ) {
+  if (hasPhysicalPrize(haystack)) {
     return 'hardware';
+  }
+
+  if (hasCashPayoutSignal(haystack) || (hasShortMoneyAmount(haystack) && !hasPrizeValueLanguage(haystack))) {
+    return 'cash';
   }
 
   if (sourceType === 'social' && socialHardwareSources.includes(source)) {
