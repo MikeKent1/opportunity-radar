@@ -82,7 +82,49 @@ function eufundingAudience(opportunity) {
   return [...tags];
 }
 
+function grantsAudience(opportunity) {
+  const applicantTypes = Array.isArray(opportunity.raw_data?.summary?.applicant_types)
+    ? opportunity.raw_data.summary.applicant_types.join(' ')
+    : '';
+  const eligibility = opportunity.raw_data?.summary?.applicant_eligibility_description ?? '';
+  const haystack = `${opportunity.summary ?? ''} ${opportunity.tags?.join(' ') ?? ''} ${applicantTypes} ${eligibility}`.toLowerCase();
+  const tags = new Set();
+
+  if (/native_american|tribal|indian tribes|tribal organizations/.test(haystack)) {
+    tags.add('tribal_organization');
+  }
+  if (/nonprofit|community organizations|faith-based/.test(haystack)) tags.add('nonprofit');
+  if (/small business|business|for-profit|commercial/.test(haystack)) tags.add('company');
+  if (/state|county|city|township|municipal|government/.test(haystack)) tags.add('government');
+  if (/higher education|university|school|student|academic/.test(haystack)) tags.add('student');
+
+  return tags.size ? [...tags] : ['nonprofit', 'company'];
+}
+
+function grantsFlags(opportunity) {
+  const eligibility = String(opportunity.raw_data?.summary?.applicant_eligibility_description ?? '').toLowerCase();
+  const applicantTypes = Array.isArray(opportunity.raw_data?.summary?.applicant_types)
+    ? opportunity.raw_data.summary.applicant_types.join(' ').toLowerCase()
+    : '';
+  const haystack = `${applicantTypes} ${eligibility}`;
+  const flags = new Set(['us_federal_grant']);
+  if (/\bforeign entities are not eligible\b/.test(haystack)) flags.add('foreign_entities_excluded');
+  if (/native_american|tribal|indian tribes|tribal organizations/.test(haystack)) {
+    flags.add('tribal_organizations_only');
+  }
+  return [...flags];
+}
+
 function eligibilityFor(opportunity) {
+  if (opportunity.source === 'grants') {
+    return {
+      eligible_countries: ['US'],
+      eligible_regions: [],
+      audience_tags: grantsAudience(opportunity),
+      eligibility_flags: grantsFlags(opportunity),
+    };
+  }
+
   if (opportunity.source === 'kaggle') {
     return {
       eligible_countries: ['WORLDWIDE'],
@@ -117,7 +159,7 @@ const { data, error } = await supabase
   .from('opportunities')
   .select('id, source, summary, tags, raw_data')
   .eq('status', 'active')
-  .in('source', ['kaggle', 'eufunding', 'ted']);
+  .in('source', ['grants', 'kaggle', 'eufunding', 'ted']);
 
 if (error) throw error;
 

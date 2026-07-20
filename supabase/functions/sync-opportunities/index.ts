@@ -21,6 +21,12 @@ type NormalizedOpportunity = {
   currency: string;
   deadline: string | null;
   tags: string[];
+  eligible_countries?: string[];
+  excluded_countries?: string[];
+  eligible_regions?: string[];
+  audience_tags?: string[];
+  eligibility_flags?: string[];
+  minimum_age?: number | null;
   status: 'active';
   published_at: string;
   raw_data: unknown;
@@ -46,6 +52,42 @@ const plainText = (value: unknown) =>
     .replace(/&quot;/g, '"')
     .replace(/\s+/g, ' ')
     .trim();
+
+function grantEligibility(summary: Record<string, unknown> | null) {
+  const applicantTypes = Array.isArray(summary?.applicant_types)
+    ? summary.applicant_types.map((value) => text(value).toLowerCase())
+    : [];
+  const eligibilityText = plainText(summary?.applicant_eligibility_description).toLowerCase();
+  const haystack = `${applicantTypes.join(' ')} ${eligibilityText}`;
+  const audienceTags = new Set<string>();
+  const eligibilityFlags = new Set<string>(['us_federal_grant']);
+
+  if (/\bforeign entities are not eligible\b/.test(haystack)) {
+    eligibilityFlags.add('foreign_entities_excluded');
+  }
+  if (/native_american|tribal|indian tribes|tribal organizations/.test(haystack)) {
+    audienceTags.add('tribal_organization');
+    eligibilityFlags.add('tribal_organizations_only');
+  }
+  if (/nonprofit|community organizations|faith-based/.test(haystack)) {
+    audienceTags.add('nonprofit');
+  }
+  if (/small business|business|for-profit|commercial/.test(haystack)) {
+    audienceTags.add('company');
+  }
+  if (/state|county|city|township|municipal|government/.test(haystack)) {
+    audienceTags.add('government');
+  }
+  if (/higher education|university|school|student|academic/.test(haystack)) {
+    audienceTags.add('student');
+  }
+
+  return {
+    eligible_countries: ['US'],
+    audience_tags: audienceTags.size ? [...audienceTags] : ['nonprofit', 'company'],
+    eligibility_flags: [...eligibilityFlags],
+  };
+}
 
 async function fetchGrants(): Promise<NormalizedOpportunity[]> {
   const apiKey = Deno.env.get('GRANTS_API_KEY');
@@ -126,6 +168,7 @@ async function fetchGrants(): Promise<NormalizedOpportunity[]> {
           item.deadline,
       ) || null,
       tags: ['US Grant', text(item.category, 'Funding'), ...fundingCategories].slice(0, 5),
+      ...grantEligibility(summary),
       status: 'active',
       published_at: text(
         summary?.post_date ??
