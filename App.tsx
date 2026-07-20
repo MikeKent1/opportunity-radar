@@ -29,8 +29,6 @@ import { Opportunity, OpportunitySource } from './src/types';
 import {
   loadSavedOpportunityIds,
   loadOpportunities,
-  loadOpportunityCounts,
-  OpportunityCounts,
   saveOpportunity,
   subscribeToOpportunities,
   unsaveOpportunity,
@@ -136,18 +134,6 @@ type PreparedOpportunity = Opportunity & {
 type SecondaryFilter = {
   id: string;
   label: string;
-};
-
-const initialOpportunityCounts: OpportunityCounts = {
-  all: 0,
-  giveaways: 0,
-  freetoplay: 0,
-  launches: 0,
-  competitions: 0,
-  feeds: 0,
-  community: 0,
-  grants: 0,
-  tenders: 0,
 };
 
 const filters: { id: Filter; label: string }[] = [
@@ -588,8 +574,6 @@ export default function App() {
   const [profileTypePreference, setProfileTypePreference] = useState<string | null>(null);
   const [profileTypePreferenceLoaded, setProfileTypePreferenceLoaded] = useState(false);
   const [visibleLimit, setVisibleLimit] = useState(OPPORTUNITY_PAGE_SIZE);
-  const [opportunityCounts, setOpportunityCounts] =
-    useState<OpportunityCounts>(initialOpportunityCounts);
   const listRef = useRef<FlatList<PreparedOpportunity>>(null);
 
   const fetchOpportunities = useCallback(async (silent = false) => {
@@ -598,13 +582,6 @@ export default function App() {
     const result = await loadOpportunities();
     setOpportunities(result.data);
     setNotice(result.notice);
-    void loadOpportunityCounts().then((countsResult) => {
-      if (countsResult.error) {
-        console.warn('Supabase opportunity counts query failed:', countsResult.error);
-        return;
-      }
-      setOpportunityCounts(countsResult.data);
-    });
     setLoading(false);
     setRefreshing(false);
   }, []);
@@ -623,6 +600,13 @@ export default function App() {
 
     setSavedOpportunityIds(result.data);
   }, [session]);
+
+  const handleRefresh = useCallback(() => {
+    setRefreshing(true);
+    void Promise.all([fetchOpportunities(true), fetchSavedOpportunities()]).finally(() => {
+      setRefreshing(false);
+    });
+  }, [fetchOpportunities, fetchSavedOpportunities]);
 
   useEffect(() => {
     void fetchOpportunities();
@@ -1499,8 +1483,8 @@ export default function App() {
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
-          initialNumToRender={5}
-          maxToRenderPerBatch={5}
+          initialNumToRender={4}
+          maxToRenderPerBatch={4}
           updateCellsBatchingPeriod={50}
           windowSize={5}
           removeClippedSubviews={Platform.OS !== 'web'}
@@ -1508,11 +1492,7 @@ export default function App() {
             <RefreshControl
               refreshing={refreshing}
               tintColor="#D9FF57"
-              onRefresh={() => {
-                setRefreshing(true);
-                void fetchOpportunities(true);
-                void fetchSavedOpportunities();
-              }}
+              onRefresh={handleRefresh}
             />
           }
           ListHeaderComponent={
