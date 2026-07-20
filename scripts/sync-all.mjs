@@ -75,6 +75,12 @@ const providers = [
     script: 'scripts/backfill-giveaway-enrichment.mjs',
     optional: true,
   },
+  {
+    id: 'opportunity-eligibility-enrichment',
+    label: 'Opportunity eligibility enrichment',
+    script: 'scripts/backfill-opportunity-eligibility-enrichment.mjs',
+    optional: true,
+  },
 ];
 
 const timeoutMs = Number(process.env.SYNC_PROVIDER_TIMEOUT_MS ?? 180_000);

@@ -67,7 +67,15 @@ function grantEligibility(summary: Record<string, unknown> | null) {
   }
   if (/native_american|tribal|indian tribes|tribal organizations/.test(haystack)) {
     audienceTags.add('tribal_organization');
-    eligibilityFlags.add('tribal_organizations_only');
+    const hasOnlyTribalApplicantTypes =
+      applicantTypes.length > 0 &&
+      applicantTypes.every((value) => /native_american|tribal/.test(value));
+    if (
+      hasOnlyTribalApplicantTypes ||
+      /\beligible applicants are indian tribes and tribal organizations\b/.test(eligibilityText)
+    ) {
+      eligibilityFlags.add('tribal_organizations_only');
+    }
   }
   if (/nonprofit|community organizations|faith-based/.test(haystack)) {
     audienceTags.add('nonprofit');

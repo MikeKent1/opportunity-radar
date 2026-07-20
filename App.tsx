@@ -43,7 +43,15 @@ const OPPORTUNITY_PAGE_SIZE = 15;
 const COUNTRY_STORAGE_PREFIX = 'prizen.countryPreference';
 const PROFILE_TYPE_STORAGE_PREFIX = 'prizen.profileTypePreference';
 const localLimitingRiskFlags = new Set(['local_use_reward', 'region_limited']);
-const hardEligibilityFlags = new Set(['invite_only', 'employees_only', 'members_only', 'students_only']);
+const strictHiddenEligibilityFlags = new Set(['invite_only', 'employees_only', 'members_only']);
+const profileLimitedEligibilityFlags: Record<string, string[]> = {
+  students_only: ['student'],
+  nonprofits_only: ['nonprofit'],
+  companies_only: ['company', 'startup'],
+  government_only: ['government'],
+  tribal_organizations_only: ['tribal_organization'],
+  research_institutions_only: ['student', 'nonprofit'],
+};
 const euCountryCodes = new Set([
   'AT',
   'BE',
@@ -97,6 +105,8 @@ const profileTypeOptions = [
   { id: 'startup', label: 'Startup' },
   { id: 'nonprofit', label: 'Nonprofit' },
   { id: 'company', label: 'Company' },
+  { id: 'government', label: 'Government' },
+  { id: 'tribal_organization', label: 'Tribal organization' },
 ];
 const legalLinks = [
   { label: 'Privacy Policy', url: 'https://prizen.app/privacy' },
@@ -383,8 +393,12 @@ function hasAudienceMismatch(opportunity: PreparedOpportunity, profileType: stri
 
 function hasHardEligibilityMismatch(opportunity: PreparedOpportunity, profileType: string | null) {
   const flags = Array.isArray(opportunity.eligibility_flags) ? opportunity.eligibility_flags : [];
-  if (flags.some((flag) => hardEligibilityFlags.has(flag)) && !profileType) return false;
-  if (flags.includes('students_only') && profileType !== 'student') return true;
+  if (flags.some((flag) => strictHiddenEligibilityFlags.has(flag))) return true;
+  for (const [flag, allowedProfileTypes] of Object.entries(profileLimitedEligibilityFlags)) {
+    if (flags.includes(flag) && (!profileType || !allowedProfileTypes.includes(profileType))) {
+      return true;
+    }
+  }
   return false;
 }
 
@@ -848,6 +862,94 @@ export default function App() {
       tenders: countVisible('tenders'),
     };
   }, [countryPreference, opportunityBuckets, profileTypePreference, savedOpportunityIds.size]);
+
+  const secondaryFilterCounts = useMemo<Partial<Record<Filter, Record<string, number>>>>(() => {
+    const counts: Partial<Record<Filter, Record<string, number>>> = {};
+
+    for (const [filterId, items] of Object.entries(secondaryFilters) as [
+      Filter,
+      SecondaryFilter[],
+    ][]) {
+      const eligibleOpportunities = opportunityBuckets[filterId].filter(
+        (opportunity) =>
+          !shouldHideForLocation(
+            opportunity,
+            countryPreference,
+            profileTypePreference,
+            false,
+            filterId,
+          ),
+      );
+      counts[filterId] = Object.fromEntries(
+        items.map((item) => [
+          item.id,
+          eligibleOpportunities.filter((opportunity) =>
+            matchesSecondaryFilter(opportunity, filterId, item.id),
+          ).length,
+        ]),
+      );
+    }
+
+    return counts;
+  }, [countryPreference, opportunityBuckets, profileTypePreference]);
+
+  const visibleFilters = useMemo(() => {
+    if (loading && opportunities.length === 0) return filters;
+    return filters.filter((item) => filterCounts[item.id] > 0);
+  }, [filterCounts, loading, opportunities.length]);
+
+  const visibleSecondaryFilters = useMemo(() => {
+    const items = secondaryFilters[filter];
+    if (!items) return undefined;
+    const counts = secondaryFilterCounts[filter] ?? {};
+    return items.filter((item) => (counts[item.id] ?? 0) > 0);
+  }, [filter, secondaryFilterCounts]);
+
+  const firstVisibleSecondaryFilter = useCallback(
+    (filterId: Filter) => {
+      const items = secondaryFilters[filterId];
+      if (!items) return 'all';
+      const counts = secondaryFilterCounts[filterId] ?? {};
+      return items.find((item) => (counts[item.id] ?? 0) > 0)?.id ?? 'all';
+    },
+    [secondaryFilterCounts],
+  );
+
+  useEffect(() => {
+    if (loading && opportunities.length === 0) return;
+    if (visibleFilters.length === 0) return;
+    if (filterCounts[filter] > 0) return;
+
+    const nextFilter = visibleFilters[0].id;
+    listRef.current?.scrollToOffset({ offset: 0, animated: false });
+    setVisibleLimit(OPPORTUNITY_PAGE_SIZE);
+    setFilter(nextFilter);
+    setActiveSecondaryFilters((current) => ({
+      ...current,
+      [nextFilter]: firstVisibleSecondaryFilter(nextFilter),
+    }));
+  }, [
+    filter,
+    filterCounts,
+    firstVisibleSecondaryFilter,
+    loading,
+    opportunities.length,
+    visibleFilters,
+  ]);
+
+  useEffect(() => {
+    if (!secondaryFilters[filter]) return;
+    if (!visibleSecondaryFilters?.length) return;
+    if (visibleSecondaryFilters.some((item) => item.id === activeSecondaryFilter)) return;
+
+    listRef.current?.scrollToOffset({ offset: 0, animated: false });
+    setVisibleLimit(OPPORTUNITY_PAGE_SIZE);
+    setActiveSecondaryFilters((current) => ({
+      ...current,
+      [filter]: visibleSecondaryFilters[0].id,
+    }));
+  }, [activeSecondaryFilter, filter, visibleSecondaryFilters]);
+
   const profileName = session ? getProfileName(session) : '';
   const profileAvatarUrl = session ? getProfileAvatarUrl(session) : null;
   const profileProvider = session ? getProfileProvider(session) : 'google';
@@ -1496,7 +1598,7 @@ export default function App() {
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.filters}
               >
-                {filters.map((item) => {
+                {visibleFilters.map((item) => {
                   const active = filter === item.id;
                   const count = filterCounts[item.id];
                   return (
@@ -1507,6 +1609,10 @@ export default function App() {
                           listRef.current?.scrollToOffset({ offset: 0, animated: false });
                           setVisibleLimit(OPPORTUNITY_PAGE_SIZE);
                           setFilter(item.id);
+                          setActiveSecondaryFilters((current) => ({
+                            ...current,
+                            [item.id]: firstVisibleSecondaryFilter(item.id),
+                          }));
                         }
                       }}
                       style={[styles.filterButton, active && styles.filterButtonActive]}
@@ -1530,13 +1636,13 @@ export default function App() {
                 })}
               </ScrollView>
 
-              {secondaryFilters[filter] && (
+              {visibleSecondaryFilters && visibleSecondaryFilters.length > 0 && (
                 <ScrollView
                   horizontal
                   showsHorizontalScrollIndicator={false}
                   contentContainerStyle={styles.subfilters}
                 >
-                  {secondaryFilters[filter]?.map((item) => {
+                  {visibleSecondaryFilters.map((item) => {
                     const active = activeSecondaryFilter === item.id;
                     return (
                       <Pressable

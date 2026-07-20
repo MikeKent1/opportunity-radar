@@ -50,6 +50,7 @@
     "rewards:backfill": "node scripts/backfill-giveaway-rewards.mjs",
     "giveaways:enrich": "node scripts/backfill-giveaway-enrichment.mjs",
     "eligibility:backfill": "node scripts/backfill-general-eligibility.mjs",
+    "eligibility:enrich": "node scripts/backfill-opportunity-eligibility-enrichment.mjs",
     "expired:cleanup": "node scripts/close-expired-opportunities.mjs",
     "pipeline:health": "node scripts/pipeline-health.mjs",
     "scheduled:sync": "node scripts/sync-all.mjs",

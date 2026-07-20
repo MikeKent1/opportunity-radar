@@ -101,6 +101,20 @@ function grantsAudience(opportunity) {
   return tags.size ? [...tags] : ['nonprofit', 'company'];
 }
 
+function isTribalOnlyGrant(opportunity) {
+  const applicantTypes = Array.isArray(opportunity.raw_data?.summary?.applicant_types)
+    ? opportunity.raw_data.summary.applicant_types.map((value) => String(value).toLowerCase())
+    : [];
+  const eligibility = String(opportunity.raw_data?.summary?.applicant_eligibility_description ?? '').toLowerCase();
+  const hasOnlyTribalApplicantTypes =
+    applicantTypes.length > 0 &&
+    applicantTypes.every((value) => /native_american|tribal/.test(value));
+  return (
+    hasOnlyTribalApplicantTypes ||
+    /\beligible applicants are indian tribes and tribal organizations\b/.test(eligibility)
+  );
+}
+
 function grantsFlags(opportunity) {
   const eligibility = String(opportunity.raw_data?.summary?.applicant_eligibility_description ?? '').toLowerCase();
   const applicantTypes = Array.isArray(opportunity.raw_data?.summary?.applicant_types)
@@ -109,7 +123,7 @@ function grantsFlags(opportunity) {
   const haystack = `${applicantTypes} ${eligibility}`;
   const flags = new Set(['us_federal_grant']);
   if (/\bforeign entities are not eligible\b/.test(haystack)) flags.add('foreign_entities_excluded');
-  if (/native_american|tribal|indian tribes|tribal organizations/.test(haystack)) {
+  if (isTribalOnlyGrant(opportunity)) {
     flags.add('tribal_organizations_only');
   }
   return [...flags];
