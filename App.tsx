@@ -2082,7 +2082,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
     paddingTop: 14,
-    paddingBottom: Platform.OS === 'android' ? 16 : 4,
+    paddingBottom: Platform.OS === 'android' ? 30 : 12,
     borderTopWidth: 1,
     borderTopColor: '#253537',
     backgroundColor: '#0E1718',
