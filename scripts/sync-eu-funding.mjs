@@ -123,6 +123,13 @@ const budgetAmount = (metadata) => {
     return null;
   }
 };
+const audienceTags = (metadata) => {
+  const haystack = `${first(metadata, 'typesOfAction')} ${first(metadata, 'descriptionByte')}`.toLowerCase();
+  const tags = new Set(['company', 'nonprofit']);
+  if (/\b(sme|startup|start-up|entrepreneur)\b/i.test(haystack)) tags.add('startup');
+  if (/\b(universit|research|academic|student|doctoral|phd)\b/i.test(haystack)) tags.add('student');
+  return [...tags];
+};
 
 const normalized = (payload.results ?? []).flatMap((item) => {
   const metadata = item.metadata ?? {};
@@ -147,6 +154,9 @@ const normalized = (payload.results ?? []).flatMap((item) => {
     currency: 'EUR',
     deadline: deadlines[0].toISOString(),
     tags: ['EU Grant', sourceProgramme, first(metadata, 'typesOfAction')].filter(Boolean),
+    eligible_regions: ['EU'],
+    audience_tags: audienceTags(metadata),
+    eligibility_flags: ['eu_programme'],
     status: 'active',
     published_at: Number.isFinite(startDate.getTime())
       ? startDate.toISOString()

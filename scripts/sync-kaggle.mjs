@@ -137,6 +137,10 @@ const opportunities = rows.flatMap((item, index) => {
         ? deadline.toISOString()
         : null,
       tags: ['Competition', category, reward].filter(Boolean).slice(0, 5),
+      eligible_countries: ['WORLDWIDE'],
+      eligible_regions: ['WORLDWIDE'],
+      audience_tags: ['individual'],
+      eligibility_flags: [],
       status: 'active',
       published_at: new Date().toISOString(),
       raw_data: item,

@@ -41,7 +41,38 @@ const prizenAppIcon = require('./assets/prizen-icon.png');
 const prizenMark = require('./assets/prizen-mark-transparent.png');
 const OPPORTUNITY_PAGE_SIZE = 15;
 const COUNTRY_STORAGE_PREFIX = 'prizen.countryPreference';
+const PROFILE_TYPE_STORAGE_PREFIX = 'prizen.profileTypePreference';
 const localLimitingRiskFlags = new Set(['local_use_reward', 'region_limited']);
+const hardEligibilityFlags = new Set(['invite_only', 'employees_only', 'members_only', 'students_only']);
+const euCountryCodes = new Set([
+  'AT',
+  'BE',
+  'BG',
+  'HR',
+  'CY',
+  'CZ',
+  'DK',
+  'EE',
+  'FI',
+  'FR',
+  'DE',
+  'GR',
+  'HU',
+  'IE',
+  'IT',
+  'LV',
+  'LT',
+  'LU',
+  'MT',
+  'NL',
+  'PL',
+  'PT',
+  'RO',
+  'SK',
+  'SI',
+  'ES',
+  'SE',
+]);
 const countryOptions = [
   { code: 'WORLDWIDE', label: 'Worldwide / Any' },
   { code: 'GR', label: 'Greece' },
@@ -59,6 +90,13 @@ const countryOptions = [
   { code: 'IT', label: 'Italy' },
   { code: 'IE', label: 'Ireland' },
   { code: 'NZ', label: 'New Zealand' },
+];
+const profileTypeOptions = [
+  { id: 'individual', label: 'Individual' },
+  { id: 'student', label: 'Student' },
+  { id: 'startup', label: 'Startup' },
+  { id: 'nonprofit', label: 'Nonprofit' },
+  { id: 'company', label: 'Company' },
 ];
 const legalLinks = [
   { label: 'Privacy Policy', url: 'https://prizen.app/privacy' },
@@ -270,8 +308,16 @@ function getCountryLabel(countryCode: string | null) {
   return countryOptions.find((country) => country.code === countryCode)?.label ?? 'Not set';
 }
 
+function getProfileTypeLabel(profileType: string | null) {
+  return profileTypeOptions.find((option) => option.id === profileType)?.label ?? 'Not set';
+}
+
 function countryStorageKey(userId: string) {
   return `${COUNTRY_STORAGE_PREFIX}:${userId}`;
+}
+
+function profileTypeStorageKey(userId: string) {
+  return `${PROFILE_TYPE_STORAGE_PREFIX}:${userId}`;
 }
 
 function getDeadlineTimestamp(value: string | null | undefined) {
@@ -308,19 +354,55 @@ function hasCountryMismatch(opportunity: PreparedOpportunity, countryCode: strin
   const eligibleCountries = Array.isArray(opportunity.eligible_countries)
     ? opportunity.eligible_countries.map((country) => country.toUpperCase())
     : [];
+  const excludedCountries = Array.isArray(opportunity.excluded_countries)
+    ? opportunity.excluded_countries.map((country) => country.toUpperCase())
+    : [];
+  if (excludedCountries.includes(countryCode)) return true;
   if (eligibleCountries.length === 0 || eligibleCountries.includes('WORLDWIDE')) return false;
   return !eligibleCountries.includes(countryCode);
+}
+
+function hasRegionMismatch(opportunity: PreparedOpportunity, countryCode: string | null) {
+  if (!countryCode || countryCode === 'WORLDWIDE') return false;
+  const eligibleRegions = Array.isArray(opportunity.eligible_regions)
+    ? opportunity.eligible_regions.map((region) => region.toUpperCase())
+    : [];
+  if (eligibleRegions.length === 0 || eligibleRegions.includes('WORLDWIDE')) return false;
+  if (eligibleRegions.includes('EU') && euCountryCodes.has(countryCode)) return false;
+  return true;
+}
+
+function hasAudienceMismatch(opportunity: PreparedOpportunity, profileType: string | null) {
+  const audienceTags = Array.isArray(opportunity.audience_tags)
+    ? opportunity.audience_tags.map((tag) => tag.toLowerCase())
+    : [];
+  if (audienceTags.length === 0 || audienceTags.includes('individual')) return false;
+  if (!profileType) return false;
+  return !audienceTags.includes(profileType);
+}
+
+function hasHardEligibilityMismatch(opportunity: PreparedOpportunity, profileType: string | null) {
+  const flags = Array.isArray(opportunity.eligibility_flags) ? opportunity.eligibility_flags : [];
+  if (flags.some((flag) => hardEligibilityFlags.has(flag)) && !profileType) return false;
+  if (flags.includes('students_only') && profileType !== 'student') return true;
+  return false;
 }
 
 function shouldHideForLocation(
   opportunity: PreparedOpportunity,
   countryCode: string | null,
+  profileType: string | null,
   hasQuery: boolean,
   filter: Filter,
 ) {
   if (hasQuery || filter === 'saved') return false;
   if (isLocallyLimitedOpportunity(opportunity)) return true;
-  return hasCountryMismatch(opportunity, countryCode);
+  return (
+    hasCountryMismatch(opportunity, countryCode) ||
+    hasRegionMismatch(opportunity, countryCode) ||
+    hasAudienceMismatch(opportunity, profileType) ||
+    hasHardEligibilityMismatch(opportunity, profileType)
+  );
 }
 
 function getOpportunityRankScore(opportunity: PreparedOpportunity) {
@@ -488,6 +570,9 @@ export default function App() {
   const [countryPickerVisible, setCountryPickerVisible] = useState(false);
   const [countryPreference, setCountryPreference] = useState<string | null>(null);
   const [countryPreferenceLoaded, setCountryPreferenceLoaded] = useState(false);
+  const [profileTypePickerVisible, setProfileTypePickerVisible] = useState(false);
+  const [profileTypePreference, setProfileTypePreference] = useState<string | null>(null);
+  const [profileTypePreferenceLoaded, setProfileTypePreferenceLoaded] = useState(false);
   const [visibleLimit, setVisibleLimit] = useState(OPPORTUNITY_PAGE_SIZE);
   const [opportunityCounts, setOpportunityCounts] =
     useState<OpportunityCounts>(initialOpportunityCounts);
@@ -542,19 +627,31 @@ export default function App() {
       setCountryPreference(null);
       setCountryPreferenceLoaded(true);
       setCountryPickerVisible(false);
+      setProfileTypePreference(null);
+      setProfileTypePreferenceLoaded(true);
+      setProfileTypePickerVisible(false);
       return () => {
         cancelled = true;
       };
     }
 
     setCountryPreferenceLoaded(false);
-    void AsyncStorage.getItem(countryStorageKey(session.user.id)).then((storedCountry) => {
+    setProfileTypePreferenceLoaded(false);
+    void Promise.all([
+      AsyncStorage.getItem(countryStorageKey(session.user.id)),
+      AsyncStorage.getItem(profileTypeStorageKey(session.user.id)),
+    ]).then(([storedCountry, storedProfileType]) => {
       if (cancelled) return;
       const validCountry = countryOptions.some((country) => country.code === storedCountry)
         ? storedCountry
         : null;
+      const validProfileType = profileTypeOptions.some((option) => option.id === storedProfileType)
+        ? storedProfileType
+        : null;
       setCountryPreference(validCountry);
+      setProfileTypePreference(validProfileType);
       setCountryPreferenceLoaded(true);
+      setProfileTypePreferenceLoaded(true);
       setCountryPickerVisible(!validCountry);
     });
 
@@ -669,6 +766,16 @@ export default function App() {
     [session],
   );
 
+  const handleSelectProfileType = useCallback(
+    async (profileType: string) => {
+      if (!session) return;
+      setProfileTypePreference(profileType);
+      setProfileTypePickerVisible(false);
+      await AsyncStorage.setItem(profileTypeStorageKey(session.user.id), profileType);
+    },
+    [session],
+  );
+
   const preparedOpportunities = useMemo<PreparedOpportunity[]>(
     () =>
       opportunities.map((opportunity) => ({
@@ -676,7 +783,7 @@ export default function App() {
         isGiveaway: isGiveawayOpportunity(opportunity),
         normalizedTags: opportunity.tags.map((tag) => tag.toLocaleLowerCase('en')),
         searchText:
-          `${opportunity.title} ${opportunity.organization} ${opportunity.summary} ${opportunity.clean_summary ?? ''} ${opportunity.prize_description ?? ''} ${opportunity.eligibility ?? ''} ${(opportunity.eligible_countries ?? []).join(' ')} ${(opportunity.localities ?? []).join(' ')}`.toLocaleLowerCase(
+          `${opportunity.title} ${opportunity.organization} ${opportunity.summary} ${opportunity.clean_summary ?? ''} ${opportunity.prize_description ?? ''} ${opportunity.eligibility ?? ''} ${(opportunity.eligible_countries ?? []).join(' ')} ${(opportunity.excluded_countries ?? []).join(' ')} ${(opportunity.eligible_regions ?? []).join(' ')} ${(opportunity.localities ?? []).join(' ')} ${(opportunity.audience_tags ?? []).join(' ')} ${(opportunity.eligibility_flags ?? []).join(' ')}`.toLocaleLowerCase(
             'en',
           ),
       })),
@@ -718,7 +825,14 @@ export default function App() {
   const filterCounts = useMemo<Record<Filter, number>>(() => {
     const countVisible = (filterId: Filter) =>
       opportunityBuckets[filterId].filter(
-        (opportunity) => !shouldHideForLocation(opportunity, countryPreference, false, filterId),
+        (opportunity) =>
+          !shouldHideForLocation(
+            opportunity,
+            countryPreference,
+            profileTypePreference,
+            false,
+            filterId,
+          ),
       ).length;
 
     return {
@@ -733,7 +847,7 @@ export default function App() {
       grants: countVisible('grants'),
       tenders: countVisible('tenders'),
     };
-  }, [countryPreference, opportunityBuckets, savedOpportunityIds.size]);
+  }, [countryPreference, opportunityBuckets, profileTypePreference, savedOpportunityIds.size]);
   const profileName = session ? getProfileName(session) : '';
   const profileAvatarUrl = session ? getProfileAvatarUrl(session) : null;
   const profileProvider = session ? getProfileProvider(session) : 'google';
@@ -787,7 +901,13 @@ export default function App() {
         !secondaryFilters[appliedFilter] ||
         matchesSecondaryFilter(opportunity, appliedFilter, appliedSecondaryFilter);
       const shouldHideLocalLimited =
-        shouldHideForLocation(opportunity, countryPreference, hasNormalizedQuery, appliedFilter);
+        shouldHideForLocation(
+          opportunity,
+          countryPreference,
+          profileTypePreference,
+          hasNormalizedQuery,
+          appliedFilter,
+        );
       return (
         matchesSecondary &&
         !shouldHideLocalLimited &&
@@ -810,6 +930,7 @@ export default function App() {
     countryPreference,
     deferredQuery,
     opportunityBuckets,
+    profileTypePreference,
   ]);
   const isSwitchingOpportunities =
     appliedFilter !== filter || appliedSecondaryFilter !== activeSecondaryFilter;
@@ -950,6 +1071,20 @@ export default function App() {
                     </Text>
                     <Text style={styles.countryPreferenceAction}>Change</Text>
                   </Pressable>
+                  <Text style={styles.settingsLabel}>Profile type</Text>
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => setProfileTypePickerVisible(true)}
+                    style={({ pressed }) => [
+                      styles.countryPreferenceButton,
+                      pressed && styles.profileButtonPressed,
+                    ]}
+                  >
+                    <Text style={styles.countryPreferenceText}>
+                      {getProfileTypeLabel(profileTypePreference)}
+                    </Text>
+                    <Text style={styles.countryPreferenceAction}>Change</Text>
+                  </Pressable>
                 </View>
                 <View style={styles.legalLinks}>
                   {legalLinks.map((item) => (
@@ -1049,6 +1184,70 @@ export default function App() {
                           {country.label}
                         </Text>
                         <Text style={styles.countryOptionCode}>{country.code}</Text>
+                      </View>
+                      {active && <Text style={styles.countryOptionCheck}>✓</Text>}
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
+
+        <Modal
+          animationType="fade"
+          transparent
+          visible={Boolean(session) && profileTypePreferenceLoaded && profileTypePickerVisible}
+          onRequestClose={() => setProfileTypePickerVisible(false)}
+        >
+          <View style={styles.profileOverlay}>
+            <Pressable
+              style={styles.profileBackdrop}
+              onPress={() => setProfileTypePickerVisible(false)}
+            />
+            <View style={styles.countrySheet}>
+              <View style={styles.profileSheetTop}>
+                <Text style={styles.profileSheetTitle}>Profile type</Text>
+                <Pressable
+                  accessibilityLabel="Close profile type selector"
+                  accessibilityRole="button"
+                  hitSlop={10}
+                  onPress={() => setProfileTypePickerVisible(false)}
+                  style={styles.detailCloseButton}
+                >
+                  <Text style={styles.detailCloseText}>Γ—</Text>
+                </Pressable>
+              </View>
+              <Text style={styles.countryIntro}>
+                Prizen will hide opportunities that are clearly meant for another type of applicant.
+              </Text>
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.countryList}
+              >
+                {profileTypeOptions.map((option) => {
+                  const active = profileTypePreference === option.id;
+                  return (
+                    <Pressable
+                      key={option.id}
+                      accessibilityRole="button"
+                      onPress={() => handleSelectProfileType(option.id)}
+                      style={({ pressed }) => [
+                        styles.countryOption,
+                        active && styles.countryOptionActive,
+                        pressed && styles.profileButtonPressed,
+                      ]}
+                    >
+                      <View>
+                        <Text
+                          style={[
+                            styles.countryOptionLabel,
+                            active && styles.countryOptionLabelActive,
+                          ]}
+                        >
+                          {option.label}
+                        </Text>
+                        <Text style={styles.countryOptionCode}>{option.id.toUpperCase()}</Text>
                       </View>
                       {active && <Text style={styles.countryOptionCheck}>✓</Text>}
                     </Pressable>

@@ -94,6 +94,41 @@ const localized = (value) => {
   }
   return '';
 };
+const countryAliases = new Map([
+  ['AUT', 'AT'],
+  ['BEL', 'BE'],
+  ['BGR', 'BG'],
+  ['HRV', 'HR'],
+  ['CYP', 'CY'],
+  ['CZE', 'CZ'],
+  ['DNK', 'DK'],
+  ['EST', 'EE'],
+  ['FIN', 'FI'],
+  ['FRA', 'FR'],
+  ['DEU', 'DE'],
+  ['GRC', 'GR'],
+  ['HUN', 'HU'],
+  ['IRL', 'IE'],
+  ['ITA', 'IT'],
+  ['LVA', 'LV'],
+  ['LTU', 'LT'],
+  ['LUX', 'LU'],
+  ['MLT', 'MT'],
+  ['NLD', 'NL'],
+  ['NOR', 'NO'],
+  ['POL', 'PL'],
+  ['PRT', 'PT'],
+  ['ROU', 'RO'],
+  ['SVK', 'SK'],
+  ['SVN', 'SI'],
+  ['ESP', 'ES'],
+  ['SWE', 'SE'],
+]);
+const countryCode = (value) => {
+  const normalized = first(value).toUpperCase();
+  if (/^[A-Z]{2}$/.test(normalized)) return normalized;
+  return countryAliases.get(normalized) ?? '';
+};
 
 const opportunities = (payload.notices ?? []).flatMap((item, index) => {
   const publicationNumber = text(item['publication-number']) || `ted-${index}`;
@@ -101,6 +136,7 @@ const opportunities = (payload.notices ?? []).flatMap((item, index) => {
   if (!Number.isFinite(deadline.getTime())) return [];
 
   const amount = Number(first(item['estimated-value-proc']));
+  const buyerCountry = countryCode(item['organisation-country-buyer']);
   const rawPublicationDate = text(item['publication-date']).slice(0, 10);
   const publicationDate = new Date(`${rawPublicationDate}T00:00:00Z`);
   const links = item.links?.html ?? {};
@@ -127,6 +163,9 @@ const opportunities = (payload.notices ?? []).flatMap((item, index) => {
         ? `CPV ${first(item['classification-cpv'])}`
         : '',
     ].filter(Boolean),
+    eligible_countries: buyerCountry ? [buyerCountry] : [],
+    audience_tags: ['company'],
+    eligibility_flags: ['public_procurement'],
     status: 'active',
     published_at: Number.isFinite(publicationDate.getTime())
       ? publicationDate.toISOString()

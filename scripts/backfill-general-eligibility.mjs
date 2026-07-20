@@ -1,0 +1,147 @@
+import fs from 'node:fs';
+import { createClient } from '@supabase/supabase-js';
+
+const env = fs.existsSync('.env')
+  ? Object.fromEntries(
+      fs
+        .readFileSync('.env', 'utf8')
+        .split(/\r?\n/)
+        .filter((line) => line && !line.startsWith('#') && line.includes('='))
+        .map((line) => {
+          const index = line.indexOf('=');
+          return [line.slice(0, index), line.slice(index + 1)];
+        }),
+    )
+  : {};
+
+const setting = (key) => {
+  const value = process.env[key] ?? env[key];
+  return value && value.trim() ? value.trim() : undefined;
+};
+
+const supabaseUrl = setting('EXPO_PUBLIC_SUPABASE_URL');
+const serviceRoleKey = setting('SUPABASE_SERVICE_ROLE_KEY');
+
+if (!supabaseUrl || !serviceRoleKey) {
+  console.log(
+    JSON.stringify({
+      providers: ['general-eligibility'],
+      imported: 0,
+      skipped: 'Missing EXPO_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY',
+    }),
+  );
+  process.exit(0);
+}
+
+const countryAliases = new Map([
+  ['AUT', 'AT'],
+  ['BEL', 'BE'],
+  ['BGR', 'BG'],
+  ['HRV', 'HR'],
+  ['CYP', 'CY'],
+  ['CZE', 'CZ'],
+  ['DNK', 'DK'],
+  ['EST', 'EE'],
+  ['FIN', 'FI'],
+  ['FRA', 'FR'],
+  ['DEU', 'DE'],
+  ['GRC', 'GR'],
+  ['HUN', 'HU'],
+  ['IRL', 'IE'],
+  ['ITA', 'IT'],
+  ['LVA', 'LV'],
+  ['LTU', 'LT'],
+  ['LUX', 'LU'],
+  ['MLT', 'MT'],
+  ['NLD', 'NL'],
+  ['NOR', 'NO'],
+  ['POL', 'PL'],
+  ['PRT', 'PT'],
+  ['ROU', 'RO'],
+  ['SVK', 'SK'],
+  ['SVN', 'SI'],
+  ['ESP', 'ES'],
+  ['SWE', 'SE'],
+]);
+
+const compact = (values) => [...new Set(values.filter(Boolean))];
+const firstArrayValue = (value) => Array.isArray(value) ? String(value[0] ?? '') : String(value ?? '');
+
+function tedCountry(opportunity) {
+  const raw = opportunity.raw_data?.['organisation-country-buyer'] ?? opportunity.tags?.[1];
+  const normalized = firstArrayValue(raw).trim().toUpperCase();
+  if (/^[A-Z]{2}$/.test(normalized)) return normalized;
+  return countryAliases.get(normalized) ?? '';
+}
+
+function eufundingAudience(opportunity) {
+  const haystack = `${opportunity.summary ?? ''} ${opportunity.tags?.join(' ') ?? ''}`.toLowerCase();
+  const tags = new Set(['company', 'nonprofit']);
+  if (/\b(sme|startup|start-up|entrepreneur)\b/i.test(haystack)) tags.add('startup');
+  if (/\b(universit|research|academic|student|doctoral|phd)\b/i.test(haystack)) tags.add('student');
+  return [...tags];
+}
+
+function eligibilityFor(opportunity) {
+  if (opportunity.source === 'kaggle') {
+    return {
+      eligible_countries: ['WORLDWIDE'],
+      eligible_regions: ['WORLDWIDE'],
+      audience_tags: ['individual'],
+      eligibility_flags: [],
+    };
+  }
+
+  if (opportunity.source === 'eufunding') {
+    return {
+      eligible_regions: ['EU'],
+      audience_tags: eufundingAudience(opportunity),
+      eligibility_flags: ['eu_programme'],
+    };
+  }
+
+  if (opportunity.source === 'ted') {
+    const country = tedCountry(opportunity);
+    return {
+      eligible_countries: compact([country]),
+      audience_tags: ['company'],
+      eligibility_flags: ['public_procurement'],
+    };
+  }
+
+  return null;
+}
+
+const supabase = createClient(supabaseUrl, serviceRoleKey);
+const { data, error } = await supabase
+  .from('opportunities')
+  .select('id, source, summary, tags, raw_data')
+  .eq('status', 'active')
+  .in('source', ['kaggle', 'eufunding', 'ted']);
+
+if (error) throw error;
+
+let updated = 0;
+const counts = {};
+
+for (const opportunity of data ?? []) {
+  const values = eligibilityFor(opportunity);
+  if (!values) continue;
+
+  const { error: updateError } = await supabase
+    .from('opportunities')
+    .update(values)
+    .eq('id', opportunity.id);
+  if (updateError) throw updateError;
+
+  updated += 1;
+  counts[opportunity.source] = (counts[opportunity.source] ?? 0) + 1;
+}
+
+console.log(
+  JSON.stringify({
+    providers: ['general-eligibility'],
+    imported: updated,
+    counts,
+  }),
+);

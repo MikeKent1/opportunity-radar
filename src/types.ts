@@ -30,7 +30,12 @@ export type Opportunity = {
   risk_flags?: string[] | null;
   quality_notes?: string[] | null;
   eligible_countries?: string[] | null;
+  excluded_countries?: string[] | null;
+  eligible_regions?: string[] | null;
   localities?: string[] | null;
+  audience_tags?: string[] | null;
+  eligibility_flags?: string[] | null;
+  minimum_age?: number | null;
   url: string;
   participation_url?: string | null;
   image_url: string | null;

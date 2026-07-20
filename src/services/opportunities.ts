@@ -42,7 +42,7 @@ export async function loadOpportunities(): Promise<LoadResult> {
   const { data, error } = await supabase
     .from('opportunities')
     .select(
-      'id, external_id, source, source_type, category, subcategory, title, organization, summary, clean_summary, prize_description, eligibility, quality_score, risk_flags, quality_notes, eligible_countries, localities, url, participation_url, image_url, amount, currency, deadline, expires_at, participation_steps, tags, status, published_at, created_at, updated_at',
+      'id, external_id, source, source_type, category, subcategory, title, organization, summary, clean_summary, prize_description, eligibility, quality_score, risk_flags, quality_notes, eligible_countries, excluded_countries, eligible_regions, localities, audience_tags, eligibility_flags, minimum_age, url, participation_url, image_url, amount, currency, deadline, expires_at, participation_steps, tags, status, published_at, created_at, updated_at',
     )
     .eq('status', 'active')
     .order('published_at', { ascending: false })
