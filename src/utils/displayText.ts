@@ -1,5 +1,7 @@
+import { removeRelativeDeadlineText } from './sanitizeOpportunityText';
+
 export function cleanDisplayText(value: string | null | undefined) {
-  return String(value ?? '')
+  return removeRelativeDeadlineText(String(value ?? ''))
     .replace(/<script[\s\S]*?(?:<\/script>|$)/gi, ' ')
     .replace(/<style[\s\S]*?(?:<\/style>|$)/gi, ' ')
     .replace(/<img\b[\s\S]*?(?:>|$)/gi, ' ')
@@ -17,7 +19,6 @@ export function cleanDisplayText(value: string | null | undefined) {
     .replace(/&ndash;/g, '-')
     .replace(/&mdash;/g, '-')
     .replace(/^\d{10}\s+/, '')
-    .replace(/\b\d{1,3}\s+days?\s+left\b/gi, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
