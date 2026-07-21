@@ -163,7 +163,6 @@ const filters: { id: Filter; label: string }[] = [
   { id: 'grants', label: 'Grants' },
   { id: 'tenders', label: 'Tenders' },
   { id: 'launches', label: 'Launches' },
-  { id: 'feeds', label: 'Feeds' },
   { id: 'community', label: 'Community' },
   { id: 'saved', label: 'Saved' },
   { id: 'hidden', label: 'Hidden' },
@@ -177,7 +176,6 @@ const initialFeedFilters: OpportunityFeedFilter[] = [
   'grants',
   'tenders',
   'launches',
-  'feeds',
   'community',
 ];
 function getRemoteFeedFilter(filter: Filter): OpportunityFeedFilter | null {
@@ -408,8 +406,11 @@ function getRiskPenalty(opportunity: PreparedOpportunity) {
     if (flag === 'broken_text') return penalty + 0.4;
     if (flag === 'unclear_prize') return penalty + 0.3;
     if (flag === 'unclear_entry_path') return penalty + 0.2;
+    if (flag === 'eligibility_unclear' || flag === 'location_unclear') return penalty + 0.18;
     if (flag === 'suspicious_claims' || flag === 'crypto_spam') return penalty + 0.6;
     if (flag === 'engagement_bait' || flag === 'misleading_value') return penalty + 0.25;
+    if (flag === 'low_value') return penalty + 0.2;
+    if (flag === 'no_deadline') return penalty + 0.1;
     return penalty + 0.1;
   }, 0);
 }
@@ -485,8 +486,10 @@ function getOpportunityRankScore(opportunity: PreparedOpportunity) {
   const hasCleanSummary = opportunity.clean_summary ? 0.05 : 0;
   const hasPrize = opportunity.prize_description ? 0.05 : 0;
   const hasEligibility = opportunity.eligibility ? 0.03 : 0;
+  const hasDeadline = opportunity.deadline ? 0.03 : 0;
+  const hasActionLink = opportunity.participation_url || opportunity.url ? 0.02 : 0;
 
-  return quality + hasCleanSummary + hasPrize + hasEligibility - riskPenalty;
+  return quality + hasCleanSummary + hasPrize + hasEligibility + hasDeadline + hasActionLink - riskPenalty;
 }
 
 function compareByQuality(left: PreparedOpportunity, right: PreparedOpportunity) {
@@ -499,7 +502,7 @@ function compareByQuality(left: PreparedOpportunity, right: PreparedOpportunity)
   return getDeadlineTimestamp(right.published_at) - getDeadlineTimestamp(left.published_at);
 }
 
-function sortGiveawaysByQuality(opportunities: PreparedOpportunity[]) {
+function sortByQuality(opportunities: PreparedOpportunity[]) {
   return [...opportunities].sort(compareByQuality);
 }
 
@@ -1489,8 +1492,8 @@ export default function App() {
       return sortCashGiveaways(filtered);
     }
 
-    if (appliedFilter === 'giveaways') {
-      return sortGiveawaysByQuality(filtered);
+    if (appliedFilter !== 'saved' && appliedFilter !== 'hidden') {
+      return sortByQuality(filtered);
     }
 
     return filtered;
