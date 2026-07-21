@@ -154,6 +154,12 @@ function baselineSourceFlags(opportunity) {
 }
 
 function sourceDefaults(opportunity) {
+  if (opportunity?.source === 'freetogame') {
+    return {
+      audience_tags: ['individual'],
+    };
+  }
+
   if (opportunity?.source === 'grants') {
     return {
       eligible_countries: ['US'],
@@ -195,6 +201,55 @@ function sourceDefaults(opportunity) {
   return {};
 }
 
+function isFreeToPlayGame(opportunity) {
+  return opportunity?.source === 'freetogame';
+}
+
+function normalizeFreeToPlayGameEnrichment(enrichment, opportunity) {
+  if (!isFreeToPlayGame(opportunity)) return enrichment;
+
+  const tags = Array.isArray(opportunity?.tags) ? opportunity.tags.map(text).filter(Boolean) : [];
+  const platform = tags.find((tag) => /pc|windows|browser|web/i.test(tag));
+  const genre = tags.find((tag) => tag && tag !== platform);
+  const summary = cleanText(enrichment.clean_summary || opportunity?.summary || opportunity?.title);
+  const hasActionLink = Boolean(opportunity?.url);
+  const hasImage = Boolean(opportunity?.image_url || opportunity?.raw_data?.thumbnail);
+  const hasPlatform = Boolean(platform);
+  const baseQuality = hasActionLink && hasImage && hasPlatform ? 0.72 : 0.66;
+  const qualityScore = Math.max(Number(enrichment.quality_score) || 0, baseQuality);
+  const qualityNotes = compactList(
+    [
+      ...(enrichment.quality_notes ?? []).filter(
+        (note) => !['thin_listing', 'eligibility_unclear', 'value_unclear', 'location_unclear'].includes(lower(note)),
+      ),
+      'free_to_play_game',
+      hasPlatform ? 'platform_listed' : '',
+      hasActionLink ? 'official_source' : '',
+    ],
+    8,
+  );
+
+  return {
+    ...enrichment,
+    clean_summary:
+      summary ||
+      `${opportunity?.title ?? 'This game'} is a free-to-play game${genre ? ` in the ${genre} genre` : ''}${
+        platform ? ` for ${platform}` : ''
+      }.`,
+    eligibility:
+      'Free-to-play game listing. Availability can depend on the game platform, store, and local region.',
+    audience_tags: normalizeAudience([...(enrichment.audience_tags ?? []), 'individual']),
+    eligibility_flags: normalizeFlags(
+      (enrichment.eligibility_flags ?? []).filter(
+        (flag) => !['eligibility_unclear', 'location_unclear'].includes(lower(flag)),
+      ),
+    ),
+    quality_score: Math.min(0.82, qualityScore),
+    quality_notes: qualityNotes,
+    enrichment_reason: 'FreeToGame listing normalized as a playable free-to-play game opportunity.',
+  };
+}
+
 function fallbackEnrichment(opportunity) {
   const defaults = sourceDefaults(opportunity);
   const summary = cleanText(
@@ -204,7 +259,7 @@ function fallbackEnrichment(opportunity) {
       opportunity?.title,
   ).slice(0, 320);
 
-  return {
+  return normalizeFreeToPlayGameEnrichment({
     clean_summary: summary,
     eligibility: opportunity?.eligibility ?? null,
     eligible_countries: normalizeCountries([
@@ -233,7 +288,7 @@ function fallbackEnrichment(opportunity) {
     quality_notes: compactList(opportunity?.quality_notes ?? [], 8),
     enrichment_method: 'rules',
     enrichment_reason: 'Rule fallback preserved source eligibility defaults.',
-  };
+  }, opportunity);
 }
 
 function shouldUseAi(opportunity, env = {}) {
@@ -270,7 +325,7 @@ function normalizeEnrichment(result, fallback, opportunity) {
     ...(result?.eligible_regions ?? []),
   ]);
 
-  return {
+  return normalizeFreeToPlayGameEnrichment({
     clean_summary: cleanText(result?.clean_summary).slice(0, 320) || fallback.clean_summary,
     eligibility,
     eligible_countries: eligibleCountries,
@@ -301,7 +356,7 @@ function normalizeEnrichment(result, fallback, opportunity) {
     enrichment_reason:
       text(result?.reason).slice(0, 300) ||
       'AI enriched general eligibility and quality fields.',
-  };
+  }, opportunity);
 }
 
 export async function enrichOpportunityEligibilityWithAi(opportunity, options = {}) {
