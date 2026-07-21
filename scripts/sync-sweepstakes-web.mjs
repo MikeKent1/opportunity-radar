@@ -243,7 +243,12 @@ function extractCandidates(html, source) {
     const url = absoluteUrl(href, source.url);
     if (!title || !url || title.length < 5 || title.length > 180) continue;
 
-    const contextHtml = body.slice(match.index, match.index + 850);
+    const afterAnchorStart = match.index + match[0].length;
+    const nextAnchorOffset = body.slice(afterAnchorStart).search(/<a\b[^>]*href=/i);
+    const contextEnd = nextAnchorOffset >= 0
+      ? afterAnchorStart + nextAnchorOffset
+      : match.index + 850;
+    const contextHtml = body.slice(match.index, contextEnd);
     const details = stripHtml(contextHtml).replace(title, '').trim();
     if (!looksLikeGiveaway(title, details, url)) continue;
 

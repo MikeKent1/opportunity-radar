@@ -55,11 +55,22 @@ const hasCashPayoutSignal = (haystack) =>
     'win money',
     'wire transfer',
   ]);
+const hasNonPayoutMoneyContext = (haystack) =>
+  /\b(?:cash rates?|rates? (?:currently )?start(?:s|ing)? at|starting at|retail value|valued at|value of|worth|msrp|hotel rates?|points per night|book(?:ing)? (?:it )?with points|honors points)\b/i.test(
+    haystack,
+  );
 const hasExplicitCashPayoutSignal = (haystack) =>
   /\b(?:cash prizes?|cash rewards?|cash payout|paypal|venmo|cashapp|bank transfer|direct deposit|wire transfer|prepaid mastercard rewards?|prize money|award money|reward money|scholarship|stipend|usd prize)\b/i.test(
     haystack,
   ) ||
   /\b(?:win|wins|winner|winners|get|gets|receive|earn|claim|score).{0,45}\b(?:cash|money|paypal|venmo|cashapp|payout|payouts|prize money|award money|reward money)\b/i.test(
+    haystack,
+  );
+const hasClearCashAmountLabel = (haystack) =>
+  /(?:[$€£]\s?\d[\d,.]*|\b\d[\d,.]*\s?(?:usd|eur|gbp|dollars?|euros?|pounds?))\s*(?:cash|paypal|venmo|cashapp|payout|prize money|award money|reward money)\b/i.test(
+    haystack,
+  ) ||
+  /\b(?:cash|paypal|venmo|cashapp|payout|prize money|award money|reward money)\b.{0,20}(?:[$€£]\s?\d[\d,.]*|\b\d[\d,.]*\s?(?:usd|eur|gbp|dollars?|euros?|pounds?))/i.test(
     haystack,
   );
 const hasTravelPrize = (haystack) =>
@@ -147,14 +158,30 @@ const buildRewardHaystack = (opportunity) => {
 
 export function hasStrongCashReward(opportunity) {
   const haystack = buildRewardHaystack(opportunity);
+  const riskFlags = Array.isArray(opportunity?.risk_flags) ? opportunity.risk_flags.map(lower) : [];
+  if (
+    riskFlags.some((flag) =>
+      ['local_use_reward', 'region_limited', 'unclear_prize', 'broken_text', 'misleading_value'].includes(flag),
+    )
+  ) {
+    return false;
+  }
+
+  const clearCashAmount = hasClearCashAmountLabel(haystack);
   const cashSignal =
-    hasCashPayoutSignal(haystack) || (hasShortMoneyAmount(haystack) && !hasPrizeValueLanguage(haystack));
+    clearCashAmount ||
+    hasCashPayoutSignal(haystack) ||
+    (hasShortMoneyAmount(haystack) && !hasPrizeValueLanguage(haystack));
   const nonCashValueSignal =
     /\b(setup|hardware|football tackle dummy|watercraft|vehicle|trip|travel package|hotel stay|flight|vacation|local pickup|in-store only|class pass|admission tickets?)\b/i.test(
       haystack,
     );
 
-  return cashSignal && (hasExplicitCashPayoutSignal(haystack) || !nonCashValueSignal);
+  return (
+    cashSignal &&
+    (clearCashAmount || !hasNonPayoutMoneyContext(haystack)) &&
+    (clearCashAmount || hasExplicitCashPayoutSignal(haystack) || !nonCashValueSignal)
+  );
 }
 
 export const rewardSubcategories = [

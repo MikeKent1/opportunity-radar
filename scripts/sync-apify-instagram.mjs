@@ -81,18 +81,18 @@ async function loadApifyMonthlyUsageUsd() {
   return Number(payload?.data?.totalUsageCreditsUsdAfterVolumeDiscount ?? 0);
 }
 
-const giveawayKeywords = [
-  'giveaway',
-  'win',
-  'winner',
-  'prize',
-  'enter',
-  'follow',
-  'comment',
-  'tag',
-  'share',
-  'contest',
-  'sweepstakes',
+const giveawayKeywordMatchers = [
+  ['giveaway', /\bgiveaways?\b/i],
+  ['win', /\bwin(?:s|ning)?\b/i],
+  ['winner', /\bwinners?\b/i],
+  ['prize', /\bprizes?\b/i],
+  ['enter', /\benter(?:ing|ed)?\b/i],
+  ['follow', /\bfollow\b/i],
+  ['comment', /\bcomments?\b/i],
+  ['tag', /\btag(?:ging)?\b/i],
+  ['share', /\bshare\b/i],
+  ['contest', /\bcontests?\b/i],
+  ['sweepstakes', /\bsweepstakes?\b/i],
 ];
 
 const hash = (value) => crypto.createHash('sha1').update(value).digest('hex').slice(0, 16);
@@ -180,12 +180,30 @@ function isRecentEnough(postedAt) {
 
 async function detectGiveaway(caption) {
   const normalized = lower(caption);
-  const matchedKeywords = giveawayKeywords.filter((keyword) => normalized.includes(keyword));
-  const looksLikeGiveaway =
+  const matchedKeywords = giveawayKeywordMatchers
+    .filter(([, pattern]) => pattern.test(normalized))
+    .map(([keyword]) => keyword);
+  const hasStrongGiveawayWord =
     matchedKeywords.includes('giveaway') ||
     matchedKeywords.includes('sweepstakes') ||
-    matchedKeywords.includes('contest') ||
-    matchedKeywords.length >= 3;
+    matchedKeywords.includes('contest');
+  const hasPrizeAction =
+    (matchedKeywords.includes('win') ||
+      matchedKeywords.includes('winner') ||
+      matchedKeywords.includes('prize')) &&
+    (matchedKeywords.includes('enter') ||
+      matchedKeywords.includes('follow') ||
+      matchedKeywords.includes('comment') ||
+      matchedKeywords.includes('tag') ||
+      matchedKeywords.includes('share'));
+  const looksLikeGiveaway =
+    hasStrongGiveawayWord ||
+    hasPrizeAction ||
+    (
+      matchedKeywords.includes('win') &&
+      matchedKeywords.includes('prize') &&
+      matchedKeywords.length >= 3
+    );
 
   if (!looksLikeGiveaway) {
     return { isGiveaway: false, subcategory: null, matchedKeywords };
