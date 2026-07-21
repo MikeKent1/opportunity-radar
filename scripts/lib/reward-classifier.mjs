@@ -1,6 +1,6 @@
 const text = (value) => String(value ?? '').trim();
 const lower = (value) => text(value).toLowerCase();
-const moneyAmountPattern = String.raw`(?:[$\u20AC\u00A3]\s?\d{2,}(?:[,.]\d{3})*(?:\.\d{2})?|\b\d{2,}(?:[,.]\d{3})*(?:\.\d{2})?\s?(?:usd|eur|gbp|dollars?|euros?|pounds?)\b)`;
+const moneyAmountPattern = String.raw`(?:[$\u20AC\u00A3]\s?\d{2,}(?:[,.]\d{3})*(?:\.\d{2})?|[$\u20AC\u00A3]\s?\d+(?:\.\d+)?\s?k\b|\b(?:usd|eur|gbp)\s?\d{2,}(?:[,.]\d{3})*(?:\.\d{2})?\b|\b\d{2,}(?:[,.]\d{3})*(?:\.\d{2})?\s?(?:usd|eur|gbp|dollars?|euros?|pounds?)\b)`;
 
 const includesAny = (haystack, needles) => needles.some((needle) => haystack.includes(needle));
 const hasMoneyAmount = (haystack) =>
@@ -14,8 +14,10 @@ const hasPrizeValueLanguage = (haystack) =>
   ) ||
   new RegExp(`\\b(?:worth|valued at|value of)\\b.{0,30}${moneyAmountPattern}`, 'i').test(haystack);
 const hasDirectCashAmount = (haystack) =>
-  !hasPrizeValueLanguage(haystack) &&
-  new RegExp(`\\b(?:win|wins|winner|winners|get|gets|receive|earn|claim)\\b.{0,40}${moneyAmountPattern}`, 'i').test(
+  new RegExp(
+    `\\b(?:win|wins|winner|winners|grand prize|prize|get|gets|receive|earn|claim)\\b.{0,45}${moneyAmountPattern}|${moneyAmountPattern}.{0,45}\\b(?:winner|winners|grand prize|prize)\\b`,
+    'i',
+  ).test(
     haystack,
   );
 const hasCashPayoutSignal = (haystack) =>
@@ -29,13 +31,12 @@ const hasCashPayoutSignal = (haystack) =>
     'award money',
     'bank transfer',
     'bounty',
-    'cash',
     'cash prize',
     'cash reward',
+    'cash payout',
     'cashapp',
     'crypto prize',
     'direct deposit',
-    'financial prize',
     'grant prize',
     'microgrant',
     'monetary prize',
@@ -54,6 +55,13 @@ const hasCashPayoutSignal = (haystack) =>
     'win money',
     'wire transfer',
   ]);
+const hasExplicitCashPayoutSignal = (haystack) =>
+  /\b(?:cash prizes?|cash rewards?|cash payout|paypal|venmo|cashapp|bank transfer|direct deposit|wire transfer|prepaid mastercard rewards?|prize money|award money|reward money|scholarship|stipend|usd prize)\b/i.test(
+    haystack,
+  ) ||
+  /\b(?:win|wins|winner|winners|get|gets|receive|earn|claim|score).{0,45}\b(?:cash|money|paypal|venmo|cashapp|payout|payouts|prize money|award money|reward money)\b/i.test(
+    haystack,
+  );
 const hasTravelPrize = (haystack) =>
   /\b(win|wins|winner|winners|get|gets|prize|grand prize|chance to win).{0,90}\b(trips?|flights?|hotel stays?|vacations?|holidays?|getaways?|resorts?|cruises?|flyaways?)\b/i.test(
     haystack,
@@ -112,6 +120,42 @@ const hasLocalUseReward = (haystack) =>
   /\b(unlimited monthly pass|monthly pass|class pass|classes?|admission tickets?|water park passes?|venue passes?|passes to the)\b/i.test(
     haystack,
   );
+const buildRewardHaystack = (opportunity) => {
+  const raw = opportunity?.raw_data && typeof opportunity.raw_data === 'object' ? opportunity.raw_data : {};
+  const rawTags = Array.isArray(opportunity?.tags) ? opportunity.tags : [];
+  const tags = rawTags.filter((tag) => !rewardSubcategoryTagSet.has(lower(tag)));
+
+  return lower(
+    [
+      opportunity?.title,
+      opportunity?.clean_summary,
+      opportunity?.prize_description,
+      opportunity?.eligibility,
+      opportunity?.summary,
+      opportunity?.organization,
+      opportunity?.source,
+      ...tags,
+      raw.type,
+      raw.platforms,
+      raw.worth,
+      raw.instructions,
+      raw.description,
+      raw.title,
+    ].join(' '),
+  );
+};
+
+export function hasStrongCashReward(opportunity) {
+  const haystack = buildRewardHaystack(opportunity);
+  const cashSignal =
+    hasCashPayoutSignal(haystack) || (hasShortMoneyAmount(haystack) && !hasPrizeValueLanguage(haystack));
+  const nonCashValueSignal =
+    /\b(setup|hardware|football tackle dummy|watercraft|vehicle|trip|travel package|hotel stay|flight|vacation|local pickup|in-store only|class pass|admission tickets?)\b/i.test(
+      haystack,
+    );
+
+  return cashSignal && (hasExplicitCashPayoutSignal(haystack) || !nonCashValueSignal);
+}
 
 export const rewardSubcategories = [
   'game',
@@ -135,10 +179,10 @@ const rewardSubcategoryTagSet = new Set([
 export function classifyRewardType(opportunity) {
   const rawTags = Array.isArray(opportunity?.tags) ? opportunity.tags : [];
   const tags = rawTags.filter((tag) => !rewardSubcategoryTagSet.has(lower(tag)));
-  const raw = opportunity?.raw_data && typeof opportunity.raw_data === 'object' ? opportunity.raw_data : {};
   const source = lower(opportunity?.source);
   const sourceType = lower(opportunity?.source_type);
   const title = lower(opportunity?.title);
+  const raw = opportunity?.raw_data && typeof opportunity.raw_data === 'object' ? opportunity.raw_data : {};
   const rawType = lower(raw.type ?? tags[0]);
   const sourceSpecificText = lower([opportunity?.title, opportunity?.summary, ...tags, raw.type].join(' '));
 
@@ -181,24 +225,7 @@ export function classifyRewardType(opportunity) {
     }
   }
 
-  const haystack = lower(
-    [
-      opportunity?.title,
-      opportunity?.clean_summary,
-      opportunity?.prize_description,
-      opportunity?.eligibility,
-      opportunity?.summary,
-      opportunity?.organization,
-      opportunity?.source,
-      ...tags,
-      raw.type,
-      raw.platforms,
-      raw.worth,
-      raw.instructions,
-      raw.description,
-      raw.title,
-    ].join(' '),
-  );
+  const haystack = buildRewardHaystack(opportunity);
 
   if (!haystack) return 'other';
 
@@ -307,7 +334,7 @@ export function classifyRewardType(opportunity) {
     return 'hardware';
   }
 
-  if (hasCashPayoutSignal(haystack) || (hasShortMoneyAmount(haystack) && !hasPrizeValueLanguage(haystack))) {
+  if (hasStrongCashReward(opportunity)) {
     return 'cash';
   }
 

@@ -77,6 +77,12 @@ function detectLocalUse(textValue) {
     /\b(unlimited monthly pass|monthly pass|class pass|classes?|water park passes?|venue passes?|admission tickets?|fitness pass|gift card to [a-z0-9 '&.-]+)\b/i.test(
       value,
     ) ||
+    /\b(general admission|ga tickets?|ticket giveaway|tickets contest|tickets giveaway|family 4-pack|4-pack|four-pack)\b/i.test(
+      value,
+    ) ||
+    /\b(waterpark|water park|zoo|aquatic center|adventure park|comedy castle|theatres?|theaters?|field tickets?|lollapalooza|legoland|holiday world|splashin' safari|urban air)\b/i.test(
+      value,
+    ) ||
     /\b(barrie|ontario|waikiki|honolulu)\b/i.test(value) &&
       /\b(location|local|pass|passes|classes?|tickets?|gift card)\b/i.test(value)
   );

@@ -549,6 +549,44 @@ function isClosingSoon(opportunity: Opportunity, days = 30) {
   return timestamp >= now && timestamp <= now + days * 86_400_000;
 }
 
+function hasStrongCashReward(opportunity: Opportunity) {
+  const haystack = [
+    opportunity.title,
+    opportunity.clean_summary,
+    opportunity.prize_description,
+    opportunity.eligibility,
+    opportunity.summary,
+    opportunity.organization,
+    opportunity.source,
+    ...(opportunity.tags ?? []),
+  ]
+    .join(' ')
+    .toLocaleLowerCase('en');
+  const moneyAmount =
+    /(?:[$\u20AC\u00A3]\s?\d{2,}(?:[,.]\d{3})*(?:\.\d{2})?|[$\u20AC\u00A3]\s?\d+(?:\.\d+)?\s?k\b|\b(?:usd|eur|gbp)\s?\d{2,}(?:[,.]\d{3})*(?:\.\d{2})?\b|\b\d{2,}(?:[,.]\d{3})*(?:\.\d{2})?\s?(?:usd|eur|gbp|dollars?|euros?|pounds?)\b)/i;
+  const directMoneyAmount = new RegExp(
+    `\\b(?:win|wins|winner|winners|grand prize|prize|get|gets|receive|earn|claim|score)\\b.{0,45}${moneyAmount.source}|${moneyAmount.source}.{0,45}\\b(?:winner|winners|grand prize|prize)\\b`,
+    'i',
+  ).test(haystack);
+  const explicitCashPayout =
+    /\b(?:win|wins|winner|winners|get|gets|receive|earn|claim|score).{0,45}\b(?:cash|money|paypal|venmo|cashapp|payout|payouts|prize money|award money|reward money)\b/i.test(
+      haystack,
+    ) ||
+    /\b(?:cash prizes?|cash rewards?|cash payout|paypal|venmo|cashapp|bank transfer|direct deposit|wire transfer|prepaid mastercard rewards?|prize money|award money|reward money|scholarship|stipend|usd prize)\b/i.test(
+      haystack,
+    );
+  const productOrLocalSignal =
+    /\b(?:setup|hardware|football tackle dummy|watercraft|vehicle|trip|travel package|hotel stay|flight|vacation|local pickup|in-store only|class pass|admission tickets?)\b/i.test(
+      haystack,
+    );
+
+  return (
+    (opportunity.subcategory ?? 'other') === 'cash' &&
+    (explicitCashPayout || directMoneyAmount) &&
+    (explicitCashPayout || !productOrLocalSignal)
+  );
+}
+
 function matchesSecondaryFilter(
   opportunity: PreparedOpportunity,
   filter: Filter,
@@ -557,6 +595,7 @@ function matchesSecondaryFilter(
   if (secondaryFilter === 'all') return true;
 
   if (filter === 'giveaways') {
+    if (secondaryFilter === 'cash') return hasStrongCashReward(opportunity);
     return (opportunity.subcategory ?? 'other') === secondaryFilter;
   }
 

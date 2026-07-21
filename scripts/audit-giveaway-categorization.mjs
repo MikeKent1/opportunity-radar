@@ -54,7 +54,7 @@ const rewardTags = new Set([
 ]);
 
 const includesAny = (text, needles) => needles.some((needle) => text.includes(needle));
-const moneyAmountPattern = String.raw`(?:[$\u20AC\u00A3]\s?\d{2,}(?:[,.]\d{3})*(?:\.\d{2})?|\b\d{2,}(?:[,.]\d{3})*(?:\.\d{2})?\s?(?:usd|eur|gbp|dollars?|euros?|pounds?)\b)`;
+const moneyAmountPattern = String.raw`(?:[$\u20AC\u00A3]\s?\d{2,}(?:[,.]\d{3})*(?:\.\d{2})?|[$\u20AC\u00A3]\s?\d+(?:\.\d+)?\s?k\b|\b(?:usd|eur|gbp)\s?\d{2,}(?:[,.]\d{3})*(?:\.\d{2})?\b|\b\d{2,}(?:[,.]\d{3})*(?:\.\d{2})?\s?(?:usd|eur|gbp|dollars?|euros?|pounds?)\b)`;
 const hasPrizeValueLanguage = (text) =>
   new RegExp(`${moneyAmountPattern}\\+?\\s*(?:in\\s+)?(?:prizes?|value|worth|gear|setup|bundle|package|products?)`, 'i').test(
     text,
@@ -137,6 +137,36 @@ const hasInGame = (text) =>
     'loot',
     'cosmetic',
   ]));
+const hasLocalUseReward = (text) =>
+  /\b(local businesses?|local partners?|local favourites?|barrie location|specific location|pickup only|in-store only|local pickup|unlimited monthly pass|monthly pass|class pass|classes?|admission tickets?|water park passes?|venue passes?)\b/i.test(
+    text,
+  );
+const hasExplicitCashPayout = (text) =>
+  /\b(?:cash prizes?|cash rewards?|cash payout|paypal|venmo|cashapp|bank transfer|direct deposit|wire transfer|prepaid mastercard rewards?|prize money|award money|reward money|scholarship|stipend|usd prize)\b/i.test(
+    text,
+  ) ||
+  /\b(?:win|wins|winner|winners|get|gets|receive|earn|claim|score).{0,45}\b(?:cash|money|paypal|venmo|cashapp|payout|payouts|prize money|award money|reward money)\b/i.test(
+    text,
+  );
+const hasDirectMoneyAmount = (text) =>
+  new RegExp(
+    `\\b(?:win|wins|winner|winners|grand prize|prize|get|gets|receive|earn|claim|score)\\b.{0,45}${moneyAmountPattern}|${moneyAmountPattern}.{0,45}\\b(?:winner|winners|grand prize|prize)\\b`,
+    'i',
+  ).test(
+    text,
+  );
+const hasStrongCashReward = (text) => {
+  const productOrLocalSignal =
+    hasHardware(text) ||
+    hasTravel(text) ||
+    hasLocalUseReward(text) ||
+    /\b(setup|hardware|football tackle dummy|watercraft|vehicle)\b/i.test(text);
+
+  return (
+    (hasExplicitCashPayout(text) || hasDirectMoneyAmount(text)) &&
+    (hasExplicitCashPayout(text) || !productOrLocalSignal)
+  );
+};
 
 function buildText(opportunity) {
   const raw = opportunity.raw_data && typeof opportunity.raw_data === 'object' ? opportunity.raw_data : {};
@@ -190,12 +220,15 @@ function auditOpportunity(opportunity) {
     opportunity.classification_method === 'ai' && Number.isFinite(confidence) && confidence >= 0.8;
   const issues = [];
 
-  if (opportunity.classification_method !== 'ai' && current !== classifier) {
-    addIssue(issues, 'high', classifier, `stored subcategory differs from classifier (${classifier})`);
-  }
-
   if (current === 'gift_card' && hasTravel(prizeText || text) && !hasGiftCard(prizeText || text)) {
     addIssue(issues, 'high', 'trip', 'gift card bucket includes a strong travel prize signal');
+  }
+
+  if (
+    current === 'cash' &&
+    !hasStrongCashReward(prizeText || text)
+  ) {
+    addIssue(issues, 'high', classifier === 'cash' ? 'other' : classifier, 'cash bucket lacks a strong direct-cash reward signal');
   }
 
   if (
