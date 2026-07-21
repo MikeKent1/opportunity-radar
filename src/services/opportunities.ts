@@ -8,6 +8,26 @@ type LoadResult = {
   notice: string | null;
 };
 
+type LoadOptions = {
+  limit?: number;
+  offset?: number;
+  filter?: OpportunityFeedFilter;
+  subcategory?: string;
+  countryCode?: string | null;
+  profileType?: string | null;
+};
+
+export type OpportunityFeedFilter =
+  | 'all'
+  | 'giveaways'
+  | 'freetoplay'
+  | 'launches'
+  | 'competitions'
+  | 'feeds'
+  | 'community'
+  | 'grants'
+  | 'tenders';
+
 export type OpportunityCounts = {
   all: number;
   giveaways: number;
@@ -18,6 +38,23 @@ export type OpportunityCounts = {
   community: number;
   grants: number;
   tenders: number;
+};
+
+type EligibleOpportunityCountsRow = {
+  all_count: number | string | null;
+  giveaways_count: number | string | null;
+  freetoplay_count: number | string | null;
+  launches_count: number | string | null;
+  competitions_count: number | string | null;
+  feeds_count: number | string | null;
+  community_count: number | string | null;
+  grants_count: number | string | null;
+  tenders_count: number | string | null;
+};
+
+type SecondaryFilterCountRow = {
+  subcategory_id: string;
+  opportunity_count: number | string | null;
 };
 
 const emptyCounts: OpportunityCounts = {
@@ -32,7 +69,10 @@ const emptyCounts: OpportunityCounts = {
   tenders: 0,
 };
 
-export async function loadOpportunities(): Promise<LoadResult> {
+export async function loadOpportunities(options: LoadOptions = {}): Promise<LoadResult> {
+  const limit = options.limit ?? 1000;
+  const offset = options.offset ?? 0;
+
   if (!isSupabaseConfigured) {
     return {
       data: demoOpportunities,
@@ -41,14 +81,14 @@ export async function loadOpportunities(): Promise<LoadResult> {
     };
   }
 
-  const { data, error } = await supabase
-    .from('opportunities')
-    .select(
-      'id, external_id, source, source_type, category, subcategory, title, organization, clean_summary, quality_score, risk_flags, quality_notes, eligible_countries, excluded_countries, eligible_regions, localities, audience_tags, eligibility_flags, minimum_age, url, participation_url, image_url, amount, currency, deadline, expires_at, tags, status, published_at, created_at, updated_at',
-    )
-    .eq('status', 'active')
-    .order('published_at', { ascending: false })
-    .limit(1000);
+  const { data, error } = await supabase.rpc('get_eligible_opportunities', {
+    country_code: options.countryCode ?? null,
+    profile_type: options.profileType ?? null,
+    feed_filter: options.filter ?? 'all',
+    feed_subcategory: options.subcategory ?? null,
+    page_limit: limit,
+    page_offset: offset,
+  });
 
   if (error) {
     console.warn('Supabase opportunities query failed:', error.message);
@@ -59,7 +99,7 @@ export async function loadOpportunities(): Promise<LoadResult> {
     };
   }
 
-  const opportunities = (data ?? []).map((item) => ({
+  const opportunities = ((data ?? []) as Opportunity[]).map((item: Opportunity) => ({
     ...item,
     summary: item.clean_summary ?? '',
   }));
@@ -140,7 +180,10 @@ async function countActiveOpportunities(applyFilter?: (query: any) => any) {
   return count ?? 0;
 }
 
-export async function loadOpportunityCounts(): Promise<{
+export async function loadOpportunityCounts(options: {
+  countryCode?: string | null;
+  profileType?: string | null;
+} = {}): Promise<{
   data: OpportunityCounts;
   error: string | null;
 }> {
@@ -156,43 +199,27 @@ export async function loadOpportunityCounts(): Promise<{
   }
 
   try {
-    const [
-      all,
-      giveaways,
-      freetoplay,
-      launches,
-      competitions,
-      feeds,
-      community,
-      grants,
-      tenders,
-    ] = await Promise.all([
-      countActiveOpportunities(),
-      countActiveOpportunities((query) =>
-        query.or(
-          'source_type.eq.social,category.eq.giveaways,source.in.(gamerpower,epicgames,cheapshark,kingsumo)',
-        ),
-      ),
-      countActiveOpportunities((query) => query.eq('source', 'freetogame')),
-      countActiveOpportunities((query) => query.eq('source', 'producthunt')),
-      countActiveOpportunities((query) => query.eq('source', 'kaggle')),
-      countActiveOpportunities((query) => query.eq('source', 'rss')),
-      countActiveOpportunities((query) => query.eq('source', 'reddit')),
-      countActiveOpportunities((query) => query.in('source', ['grants', 'eufunding'])),
-      countActiveOpportunities((query) => query.eq('source', 'ted')),
-    ]);
+    const { data, error } = await supabase
+      .rpc('get_eligible_opportunity_counts', {
+        country_code: options.countryCode ?? null,
+        profile_type: options.profileType ?? null,
+      })
+      .single();
+
+    if (error) throw error;
+    const counts = data as EligibleOpportunityCountsRow | null;
 
     return {
       data: {
-        all,
-        giveaways,
-        freetoplay,
-        launches,
-        competitions,
-        feeds,
-        community,
-        grants,
-        tenders,
+        all: Number(counts?.all_count ?? 0),
+        giveaways: Number(counts?.giveaways_count ?? 0),
+        freetoplay: Number(counts?.freetoplay_count ?? 0),
+        launches: Number(counts?.launches_count ?? 0),
+        competitions: Number(counts?.competitions_count ?? 0),
+        feeds: Number(counts?.feeds_count ?? 0),
+        community: Number(counts?.community_count ?? 0),
+        grants: Number(counts?.grants_count ?? 0),
+        tenders: Number(counts?.tenders_count ?? 0),
       },
       error: null,
     };
@@ -202,6 +229,190 @@ export async function loadOpportunityCounts(): Promise<{
       error: error instanceof Error ? error.message : 'Could not load opportunity counts.',
     };
   }
+}
+
+export async function loadGiveawaySubcategoryCounts(options: {
+  countryCode?: string | null;
+  profileType?: string | null;
+} = {}): Promise<{
+  data: Record<string, number>;
+  error: string | null;
+}> {
+  if (!isSupabaseConfigured) {
+    return {
+      data: {
+        all: demoOpportunities.filter((item) => item.category === 'giveaways').length,
+      },
+      error: null,
+    };
+  }
+
+  try {
+    const { data, error } = await supabase.rpc('get_eligible_giveaway_subcategory_counts', {
+      country_code: options.countryCode ?? null,
+      profile_type: options.profileType ?? null,
+    });
+
+    if (error) throw error;
+
+    return {
+      data: Object.fromEntries(
+        ((data ?? []) as SecondaryFilterCountRow[]).map((item) => [
+          item.subcategory_id,
+          Number(item.opportunity_count ?? 0),
+        ]),
+      ),
+      error: null,
+    };
+  } catch (error) {
+    return {
+      data: {},
+      error: error instanceof Error ? error.message : 'Could not load giveaway subcategory counts.',
+    };
+  }
+}
+
+export async function loadFreeToPlaySubcategoryCounts(options: {
+  countryCode?: string | null;
+  profileType?: string | null;
+} = {}): Promise<{
+  data: Record<string, number>;
+  error: string | null;
+}> {
+  if (!isSupabaseConfigured) {
+    return {
+      data: {
+        all: demoOpportunities.filter((item) => item.source === 'freetogame').length,
+      },
+      error: null,
+    };
+  }
+
+  try {
+    const { data, error } = await supabase.rpc('get_eligible_freetoplay_subcategory_counts', {
+      country_code: options.countryCode ?? null,
+      profile_type: options.profileType ?? null,
+    });
+
+    if (error) throw error;
+
+    return {
+      data: Object.fromEntries(
+        ((data ?? []) as SecondaryFilterCountRow[]).map((item) => [
+          item.subcategory_id,
+          Number(item.opportunity_count ?? 0),
+        ]),
+      ),
+      error: null,
+    };
+  } catch (error) {
+    return {
+      data: {},
+      error: error instanceof Error ? error.message : 'Could not load free to play counts.',
+    };
+  }
+}
+
+export async function loadCompetitionSubcategoryCounts(options: {
+  countryCode?: string | null;
+  profileType?: string | null;
+} = {}): Promise<{
+  data: Record<string, number>;
+  error: string | null;
+}> {
+  if (!isSupabaseConfigured) {
+    return {
+      data: {
+        all: demoOpportunities.filter((item) => item.source === 'kaggle').length,
+      },
+      error: null,
+    };
+  }
+
+  try {
+    const { data, error } = await supabase.rpc('get_eligible_competition_subcategory_counts', {
+      country_code: options.countryCode ?? null,
+      profile_type: options.profileType ?? null,
+    });
+
+    if (error) throw error;
+
+    return {
+      data: Object.fromEntries(
+        ((data ?? []) as SecondaryFilterCountRow[]).map((item) => [
+          item.subcategory_id,
+          Number(item.opportunity_count ?? 0),
+        ]),
+      ),
+      error: null,
+    };
+  } catch (error) {
+    return {
+      data: {},
+      error: error instanceof Error ? error.message : 'Could not load competition counts.',
+    };
+  }
+}
+
+async function loadSecondaryCountsRpc(
+  rpcName: string,
+  options: { countryCode?: string | null; profileType?: string | null } = {},
+  fallback: Record<string, number> = {},
+): Promise<{ data: Record<string, number>; error: string | null }> {
+  if (!isSupabaseConfigured) {
+    return { data: fallback, error: null };
+  }
+
+  try {
+    const { data, error } = await supabase.rpc(rpcName, {
+      country_code: options.countryCode ?? null,
+      profile_type: options.profileType ?? null,
+    });
+
+    if (error) throw error;
+
+    return {
+      data: Object.fromEntries(
+        ((data ?? []) as SecondaryFilterCountRow[]).map((item) => [
+          item.subcategory_id,
+          Number(item.opportunity_count ?? 0),
+        ]),
+      ),
+      error: null,
+    };
+  } catch (error) {
+    return {
+      data: {},
+      error: error instanceof Error ? error.message : `Could not load ${rpcName}.`,
+    };
+  }
+}
+
+export function loadGrantSubcategoryCounts(options: {
+  countryCode?: string | null;
+  profileType?: string | null;
+} = {}) {
+  return loadSecondaryCountsRpc('get_eligible_grant_subcategory_counts', options, {
+    all: demoOpportunities.filter((item) => item.source === 'grants' || item.source === 'eufunding').length,
+  });
+}
+
+export function loadTenderSubcategoryCounts(options: {
+  countryCode?: string | null;
+  profileType?: string | null;
+} = {}) {
+  return loadSecondaryCountsRpc('get_eligible_tender_subcategory_counts', options, {
+    all: demoOpportunities.filter((item) => item.source === 'ted').length,
+  });
+}
+
+export function loadLaunchSubcategoryCounts(options: {
+  countryCode?: string | null;
+  profileType?: string | null;
+} = {}) {
+  return loadSecondaryCountsRpc('get_eligible_launch_subcategory_counts', options, {
+    all: demoOpportunities.filter((item) => item.source === 'producthunt').length,
+  });
 }
 
 export function subscribeToOpportunities(onChange: () => void) {
@@ -280,6 +491,62 @@ export async function unsaveOpportunity(opportunityId: string): Promise<{
   return error
     ? { ok: false, message: error.message }
     : { ok: true, message: 'Removed from saved.' };
+}
+
+export async function loadHiddenOpportunityIds(): Promise<{
+  data: Set<string>;
+  error: string | null;
+}> {
+  if (!isSupabaseConfigured) {
+    return { data: new Set(), error: null };
+  }
+
+  const { data, error } = await supabase
+    .from('hidden_opportunities')
+    .select('opportunity_id')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    return { data: new Set(), error: error.message };
+  }
+
+  return {
+    data: new Set((data ?? []).map((item) => item.opportunity_id as string)),
+    error: null,
+  };
+}
+
+export async function hideOpportunity(opportunityId: string): Promise<{
+  ok: boolean;
+  message: string;
+}> {
+  if (!isSupabaseConfigured) {
+    return { ok: false, message: 'Supabase is not configured.' };
+  }
+
+  const { error } = await supabase
+    .from('hidden_opportunities')
+    .upsert({ opportunity_id: opportunityId }, { onConflict: 'user_id,opportunity_id' });
+
+  return error ? { ok: false, message: error.message } : { ok: true, message: 'Hidden.' };
+}
+
+export async function unhideOpportunity(opportunityId: string): Promise<{
+  ok: boolean;
+  message: string;
+}> {
+  if (!isSupabaseConfigured) {
+    return { ok: false, message: 'Supabase is not configured.' };
+  }
+
+  const { error } = await supabase
+    .from('hidden_opportunities')
+    .delete()
+    .eq('opportunity_id', opportunityId);
+
+  return error
+    ? { ok: false, message: error.message }
+    : { ok: true, message: 'Removed from hidden.' };
 }
 
 export async function syncExternalOpportunities(): Promise<{ ok: boolean; message: string }> {

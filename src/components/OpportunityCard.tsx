@@ -31,7 +31,10 @@ type OpportunityCardProps = {
   opportunity: Opportunity;
   isSaved?: boolean;
   isSaving?: boolean;
+  isHidden?: boolean;
+  isHiding?: boolean;
   onToggleSave?: () => void;
+  onToggleHide?: () => void;
   onPress?: () => void;
   onOpenExternal?: () => void;
 };
@@ -40,7 +43,10 @@ function OpportunityCardComponent({
   opportunity,
   isSaved = false,
   isSaving = false,
+  isHidden = false,
+  isHiding = false,
   onToggleSave,
+  onToggleHide,
   onPress,
   onOpenExternal,
 }: OpportunityCardProps) {
@@ -147,6 +153,27 @@ function OpportunityCardComponent({
             </View>
             <Text style={styles.deadline}>{formatDeadline(opportunity.deadline)}</Text>
           </View>
+          {onToggleHide && (
+            <Pressable
+              accessibilityLabel={isHidden ? 'Unhide opportunity' : 'Hide opportunity'}
+              accessibilityRole="button"
+              disabled={isHiding}
+              hitSlop={8}
+              onPress={(event) => {
+                event.stopPropagation();
+                onToggleHide();
+              }}
+              style={[
+                styles.hideButton,
+                isHidden && styles.hideButtonActive,
+                isHiding && styles.hideButtonDisabled,
+              ]}
+            >
+              <Text style={[styles.hideText, isHidden && styles.hideTextActive]}>
+                {isHidden ? 'Show' : 'Hide'}
+              </Text>
+            </Pressable>
+          )}
           {onToggleSave && (
             <Pressable
               accessibilityLabel={isSaved ? 'Remove from saved' : 'Save opportunity'}
@@ -238,7 +265,9 @@ export const OpportunityCard = memo(
   (previous, next) =>
     previous.opportunity === next.opportunity &&
     previous.isSaved === next.isSaved &&
-    previous.isSaving === next.isSaving,
+    previous.isSaving === next.isSaving &&
+    previous.isHidden === next.isHidden &&
+    previous.isHiding === next.isHiding,
 );
 
 const styles = StyleSheet.create({
@@ -276,6 +305,20 @@ const styles = StyleSheet.create({
   communityText: { color: '#FF8A63' },
   socialText: { color: '#F0A7FF' },
   deadline: { color: '#849395', fontSize: 11, fontWeight: '600' },
+  hideButton: {
+    height: 34,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#304143',
+    backgroundColor: '#10191A',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+  },
+  hideButtonActive: { backgroundColor: '#263536', borderColor: '#4B6263' },
+  hideButtonDisabled: { opacity: 0.55 },
+  hideText: { color: '#9CADAE', fontSize: 11, fontWeight: '900' },
+  hideTextActive: { color: '#DCE8E5' },
   saveButton: {
     width: 34,
     height: 34,

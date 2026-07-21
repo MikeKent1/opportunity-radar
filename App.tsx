@@ -10,6 +10,8 @@ import {
   InteractionManager,
   Linking,
   Modal,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   Platform,
   Pressable,
   RefreshControl,
@@ -28,19 +30,33 @@ import { isSupabaseConfigured, supabase } from './src/lib/supabase';
 import { signInWithGoogle, signOut } from './src/services/auth';
 import { Opportunity, OpportunitySource } from './src/types';
 import {
+  hideOpportunity,
+  loadCompetitionSubcategoryCounts,
+  loadFreeToPlaySubcategoryCounts,
+  loadGiveawaySubcategoryCounts,
+  loadGrantSubcategoryCounts,
+  loadHiddenOpportunityIds,
+  loadLaunchSubcategoryCounts,
+  loadOpportunityCounts,
   loadSavedOpportunityIds,
+  loadTenderSubcategoryCounts,
   loadOpportunities,
   loadOpportunityDetail,
   loadOpportunityFeedVersion,
   saveOpportunity,
   subscribeToOpportunities,
+  unhideOpportunity,
   unsaveOpportunity,
+  type OpportunityFeedFilter,
+  type OpportunityCounts,
 } from './src/services/opportunities';
 import { cleanDisplayText } from './src/utils/displayText';
 
 const prizenAppIcon = require('./assets/prizen-icon.png');
 const prizenMark = require('./assets/prizen-mark-transparent.png');
 const OPPORTUNITY_PAGE_SIZE = 15;
+const LOAD_MORE_FEEDBACK_MS = 650;
+const SCROLL_TO_TOP_THRESHOLD = 220;
 const COUNTRY_STORAGE_PREFIX = 'prizen.countryPreference';
 const PROFILE_TYPE_STORAGE_PREFIX = 'prizen.profileTypePreference';
 const localLimitingRiskFlags = new Set(['local_use_reward', 'region_limited']);
@@ -119,6 +135,7 @@ const legalLinks = [
 type Filter =
   | 'all'
   | 'saved'
+  | 'hidden'
   | 'giveaways'
   | 'freetoplay'
   | 'launches'
@@ -149,8 +166,62 @@ const filters: { id: Filter; label: string }[] = [
   { id: 'feeds', label: 'Feeds' },
   { id: 'community', label: 'Community' },
   { id: 'saved', label: 'Saved' },
+  { id: 'hidden', label: 'Hidden' },
   { id: 'all', label: 'All' },
 ];
+
+const initialFeedFilters: OpportunityFeedFilter[] = [
+  'giveaways',
+  'freetoplay',
+  'competitions',
+  'grants',
+  'tenders',
+  'launches',
+  'feeds',
+  'community',
+];
+function getRemoteFeedFilter(filter: Filter): OpportunityFeedFilter | null {
+  if (filter === 'saved' || filter === 'hidden') return null;
+  return filter;
+}
+
+function getPaginationKey(filter: Filter, secondaryFilter: string) {
+  return (
+    filter === 'giveaways' ||
+    filter === 'freetoplay' ||
+    filter === 'competitions' ||
+    filter === 'grants' ||
+    filter === 'tenders' ||
+    filter === 'launches'
+  ) && secondaryFilter !== 'all'
+    ? `${filter}:${secondaryFilter}`
+    : filter;
+}
+
+function mergeOpportunities(existing: Opportunity[], incoming: Opportunity[]) {
+  const seen = new Set(existing.map((opportunity) => opportunity.id));
+  const next = [...existing];
+
+  for (const opportunity of incoming) {
+    if (seen.has(opportunity.id)) continue;
+    seen.add(opportunity.id);
+    next.push(opportunity);
+  }
+
+  return next;
+}
+
+function prepareOpportunity(opportunity: Opportunity): PreparedOpportunity {
+  return {
+    ...opportunity,
+    isGiveaway: isGiveawayOpportunity(opportunity),
+    normalizedTags: opportunity.tags.map((tag) => tag.toLocaleLowerCase('en')),
+    searchText:
+      `${opportunity.title} ${opportunity.organization} ${opportunity.summary} ${opportunity.clean_summary ?? ''} ${opportunity.prize_description ?? ''} ${opportunity.eligibility ?? ''} ${(opportunity.eligible_countries ?? []).join(' ')} ${(opportunity.excluded_countries ?? []).join(' ')} ${(opportunity.eligible_regions ?? []).join(' ')} ${(opportunity.localities ?? []).join(' ')} ${(opportunity.audience_tags ?? []).join(' ')} ${(opportunity.eligibility_flags ?? []).join(' ')}`.toLocaleLowerCase(
+        'en',
+      ),
+  };
+}
 
 const secondaryFilters: Partial<Record<Filter, SecondaryFilter[]>> = {
   giveaways: [
@@ -398,7 +469,7 @@ function shouldHideForLocation(
   hasQuery: boolean,
   filter: Filter,
 ) {
-  if (hasQuery || filter === 'saved') return false;
+  if (hasQuery || filter === 'saved' || filter === 'hidden') return false;
   if (isLocallyLimitedOpportunity(opportunity)) return true;
   return (
     hasCountryMismatch(opportunity, countryCode) ||
@@ -562,11 +633,17 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [remoteCounts, setRemoteCounts] = useState<OpportunityCounts | null>(null);
+  const [remoteSecondaryFilterCounts, setRemoteSecondaryFilterCounts] = useState<
+    Partial<Record<Filter, Record<string, number>>>
+  >({});
   const [session, setSession] = useState<Session | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
   const [savedOpportunityIds, setSavedOpportunityIds] = useState<Set<string>>(new Set());
   const [savingOpportunityIds, setSavingOpportunityIds] = useState<Set<string>>(new Set());
+  const [hiddenOpportunityIds, setHiddenOpportunityIds] = useState<Set<string>>(new Set());
+  const [hidingOpportunityIds, setHidingOpportunityIds] = useState<Set<string>>(new Set());
   const [selectedOpportunity, setSelectedOpportunity] = useState<Opportunity | null>(null);
   const [profileVisible, setProfileVisible] = useState(false);
   const [searchVisible, setSearchVisible] = useState(false);
@@ -577,20 +654,147 @@ export default function App() {
   const [profileTypePreference, setProfileTypePreference] = useState<string | null>(null);
   const [profileTypePreferenceLoaded, setProfileTypePreferenceLoaded] = useState(false);
   const [visibleLimit, setVisibleLimit] = useState(OPPORTUNITY_PAGE_SIZE);
+  const [feedOffsets, setFeedOffsets] = useState<Record<string, number>>({});
+  const [feedHasMore, setFeedHasMore] = useState<Record<string, boolean>>({});
+  const [loadingMoreKeys, setLoadingMoreKeys] = useState<Set<string>>(new Set());
+  const [loadMoreFeedbackKey, setLoadMoreFeedbackKey] = useState<string | null>(null);
+  const [showScrollTopButton, setShowScrollTopButton] = useState(false);
   const listRef = useRef<FlatList<PreparedOpportunity>>(null);
   const latestFeedVersionRef = useRef<string | null>(null);
+  const feedRequestIdRef = useRef(0);
+  const showScrollTopButtonRef = useRef(false);
   const detailCacheRef = useRef<Map<string, Partial<Opportunity>>>(new Map());
 
+  const fetchOpportunityCounts = useCallback(async () => {
+    const result = await loadOpportunityCounts({
+      countryCode: countryPreference,
+      profileType: profileTypePreference,
+    });
+    if (result.error) {
+      console.warn('Supabase opportunity counts query failed:', result.error);
+      return;
+    }
+    setRemoteCounts(result.data);
+  }, [countryPreference, profileTypePreference]);
+
+  const fetchSecondaryFilterCounts = useCallback(async () => {
+    const [
+      giveawayResult,
+      freeToPlayResult,
+      competitionResult,
+      grantResult,
+      tenderResult,
+      launchResult,
+    ] =
+      await Promise.all([
+      loadGiveawaySubcategoryCounts({
+        countryCode: countryPreference,
+        profileType: profileTypePreference,
+      }),
+      loadFreeToPlaySubcategoryCounts({
+        countryCode: countryPreference,
+        profileType: profileTypePreference,
+      }),
+      loadCompetitionSubcategoryCounts({
+        countryCode: countryPreference,
+        profileType: profileTypePreference,
+      }),
+      loadGrantSubcategoryCounts({
+        countryCode: countryPreference,
+        profileType: profileTypePreference,
+      }),
+      loadTenderSubcategoryCounts({
+        countryCode: countryPreference,
+        profileType: profileTypePreference,
+      }),
+      loadLaunchSubcategoryCounts({
+        countryCode: countryPreference,
+        profileType: profileTypePreference,
+      }),
+    ]);
+    if (giveawayResult.error) {
+      console.warn('Supabase giveaway subcategory counts query failed:', giveawayResult.error);
+    }
+    if (freeToPlayResult.error) {
+      console.warn('Supabase free to play subcategory counts query failed:', freeToPlayResult.error);
+    }
+    if (competitionResult.error) {
+      console.warn('Supabase competition subcategory counts query failed:', competitionResult.error);
+    }
+    if (grantResult.error) {
+      console.warn('Supabase grant subcategory counts query failed:', grantResult.error);
+    }
+    if (tenderResult.error) {
+      console.warn('Supabase tender subcategory counts query failed:', tenderResult.error);
+    }
+    if (launchResult.error) {
+      console.warn('Supabase launch subcategory counts query failed:', launchResult.error);
+    }
+    setRemoteSecondaryFilterCounts((current) => ({
+      ...current,
+      giveaways: giveawayResult.error ? current.giveaways : giveawayResult.data,
+      freetoplay: freeToPlayResult.error ? current.freetoplay : freeToPlayResult.data,
+      competitions: competitionResult.error ? current.competitions : competitionResult.data,
+      grants: grantResult.error ? current.grants : grantResult.data,
+      tenders: tenderResult.error ? current.tenders : tenderResult.data,
+      launches: launchResult.error ? current.launches : launchResult.data,
+    }));
+  }, [countryPreference, profileTypePreference]);
+
   const fetchOpportunities = useCallback(async (silent = false) => {
+    const requestId = feedRequestIdRef.current + 1;
+    feedRequestIdRef.current = requestId;
     if (!silent) setLoading(true);
 
-    const result = await loadOpportunities();
-    latestFeedVersionRef.current = result.feedVersion;
-    setOpportunities(result.data);
-    setNotice(result.notice);
+    const feedRequests = [
+      ...initialFeedFilters.map((filterId) => ({
+        key: filterId,
+        filter: filterId,
+        subcategory: undefined,
+      })),
+      {
+        key: getPaginationKey('giveaways', initialSecondaryFilters.giveaways),
+        filter: 'giveaways' as OpportunityFeedFilter,
+        subcategory: initialSecondaryFilters.giveaways,
+      },
+    ];
+    const results = await Promise.all(
+      feedRequests.map(async (request) => ({
+        ...request,
+        result: await loadOpportunities({
+          filter: request.filter,
+          subcategory: request.subcategory,
+          limit: OPPORTUNITY_PAGE_SIZE,
+          countryCode: countryPreference,
+          profileType: profileTypePreference,
+        }),
+      })),
+    );
+    if (feedRequestIdRef.current !== requestId) return;
+
+    let mergedOpportunities: Opportunity[] = [];
+    const nextOffsets: Record<string, number> = {};
+    const nextHasMore: Record<string, boolean> = {};
+    let nextFeedVersion: string | null = null;
+    let nextNotice: string | null = null;
+
+    for (const { key, result } of results) {
+      mergedOpportunities = mergeOpportunities(mergedOpportunities, result.data);
+      nextOffsets[key] = result.data.length;
+      nextHasMore[key] = result.data.length === OPPORTUNITY_PAGE_SIZE;
+      nextFeedVersion = nextFeedVersion ?? result.feedVersion;
+      nextNotice = nextNotice ?? result.notice;
+    }
+
+    latestFeedVersionRef.current = nextFeedVersion;
+    setOpportunities(mergedOpportunities);
+    setFeedOffsets(nextOffsets);
+    setFeedHasMore(nextHasMore);
+    setLoadingMoreKeys(new Set());
+    setNotice(nextNotice);
     setLoading(false);
     setRefreshing(false);
-  }, []);
+  }, [countryPreference, profileTypePreference]);
 
   const fetchSavedOpportunities = useCallback(async () => {
     if (!session) {
@@ -605,6 +809,21 @@ export default function App() {
     }
 
     setSavedOpportunityIds(result.data);
+  }, [session]);
+
+  const fetchHiddenOpportunities = useCallback(async () => {
+    if (!session) {
+      setHiddenOpportunityIds(new Set());
+      return;
+    }
+
+    const result = await loadHiddenOpportunityIds();
+    if (result.error) {
+      console.warn('Supabase hidden opportunities query failed:', result.error);
+      return;
+    }
+
+    setHiddenOpportunityIds(result.data);
   }, [session]);
 
   const handleSelectOpportunity = useCallback((opportunity: Opportunity) => {
@@ -632,6 +851,9 @@ export default function App() {
       const [versionResult] = await Promise.all([
         loadOpportunityFeedVersion(),
         fetchSavedOpportunities(),
+        fetchHiddenOpportunities(),
+        fetchOpportunityCounts(),
+        fetchSecondaryFilterCounts(),
       ]);
       if (
         !versionResult.error &&
@@ -647,17 +869,34 @@ export default function App() {
     })().finally(() => {
       setRefreshing(false);
     });
-  }, [fetchOpportunities, fetchSavedOpportunities, opportunities.length]);
+  }, [
+    fetchHiddenOpportunities,
+    fetchOpportunities,
+    fetchOpportunityCounts,
+    fetchSecondaryFilterCounts,
+    fetchSavedOpportunities,
+    opportunities.length,
+  ]);
 
   useEffect(() => {
     void fetchOpportunities();
-    const unsubscribe = subscribeToOpportunities(() => fetchOpportunities(true));
+    void fetchOpportunityCounts();
+    void fetchSecondaryFilterCounts();
+    const unsubscribe = subscribeToOpportunities(() => {
+      void fetchOpportunities(true);
+      void fetchOpportunityCounts();
+      void fetchSecondaryFilterCounts();
+    });
     return unsubscribe;
-  }, [fetchOpportunities]);
+  }, [fetchOpportunities, fetchOpportunityCounts, fetchSecondaryFilterCounts]);
 
   useEffect(() => {
     void fetchSavedOpportunities();
   }, [fetchSavedOpportunities]);
+
+  useEffect(() => {
+    void fetchHiddenOpportunities();
+  }, [fetchHiddenOpportunities]);
 
   useEffect(() => {
     let cancelled = false;
@@ -784,10 +1023,76 @@ export default function App() {
     [savedOpportunityIds, savingOpportunityIds, session],
   );
 
+  const handleToggleHide = useCallback(
+    async (opportunityId: string) => {
+      if (!session || hidingOpportunityIds.has(opportunityId)) return;
+
+      const wasHidden = hiddenOpportunityIds.has(opportunityId);
+      setHidingOpportunityIds((current) => new Set(current).add(opportunityId));
+      setHiddenOpportunityIds((current) => {
+        const next = new Set(current);
+        if (wasHidden) {
+          next.delete(opportunityId);
+        } else {
+          next.add(opportunityId);
+        }
+        return next;
+      });
+
+      const result = wasHidden
+        ? await unhideOpportunity(opportunityId)
+        : await hideOpportunity(opportunityId);
+
+      setHidingOpportunityIds((current) => {
+        const next = new Set(current);
+        next.delete(opportunityId);
+        return next;
+      });
+
+      if (!result.ok) {
+        setHiddenOpportunityIds((current) => {
+          const next = new Set(current);
+          if (wasHidden) {
+            next.add(opportunityId);
+          } else {
+            next.delete(opportunityId);
+          }
+          return next;
+        });
+        Alert.alert('Hidden update failed', result.message);
+        return;
+      }
+
+      setSelectedOpportunity(null);
+      void fetchOpportunityCounts();
+      void fetchSecondaryFilterCounts();
+    },
+    [
+      fetchOpportunityCounts,
+      fetchSecondaryFilterCounts,
+      hiddenOpportunityIds,
+      hidingOpportunityIds,
+      session,
+    ],
+  );
+
   const handleOpenOpportunity = useCallback((opportunity: Opportunity) => {
     void Linking.openURL(getOpportunityActionUrl(opportunity)).catch(() => {
       Alert.alert('Could not open link', 'Please try again in a moment.');
     });
+  }, []);
+
+  const handleScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const shouldShow = event.nativeEvent.contentOffset.y > SCROLL_TO_TOP_THRESHOLD;
+    if (showScrollTopButtonRef.current === shouldShow) return;
+    showScrollTopButtonRef.current = shouldShow;
+    setShowScrollTopButton(shouldShow);
+  }, []);
+
+  const handleScrollToTop = useCallback(() => {
+    showScrollTopButtonRef.current = false;
+    setShowScrollTopButton(false);
+    listRef.current?.scrollToOffset({ offset: 0, animated: true });
   }, []);
   const handleOpenUrl = useCallback((url: string) => {
     void Linking.openURL(url).catch(() => {
@@ -816,16 +1121,7 @@ export default function App() {
   );
 
   const preparedOpportunities = useMemo<PreparedOpportunity[]>(
-    () =>
-      opportunities.map((opportunity) => ({
-        ...opportunity,
-        isGiveaway: isGiveawayOpportunity(opportunity),
-        normalizedTags: opportunity.tags.map((tag) => tag.toLocaleLowerCase('en')),
-        searchText:
-          `${opportunity.title} ${opportunity.organization} ${opportunity.summary} ${opportunity.clean_summary ?? ''} ${opportunity.prize_description ?? ''} ${opportunity.eligibility ?? ''} ${(opportunity.eligible_countries ?? []).join(' ')} ${(opportunity.excluded_countries ?? []).join(' ')} ${(opportunity.eligible_regions ?? []).join(' ')} ${(opportunity.localities ?? []).join(' ')} ${(opportunity.audience_tags ?? []).join(' ')} ${(opportunity.eligibility_flags ?? []).join(' ')}`.toLocaleLowerCase(
-            'en',
-          ),
-      })),
+    () => opportunities.map(prepareOpportunity),
     [opportunities],
   );
 
@@ -833,6 +1129,7 @@ export default function App() {
     const buckets: Record<Filter, PreparedOpportunity[]> = {
       all: [],
       saved: [],
+      hidden: [],
       giveaways: [],
       freetoplay: [],
       launches: [],
@@ -846,6 +1143,7 @@ export default function App() {
     for (const opportunity of preparedOpportunities) {
       buckets.all.push(opportunity);
       if (savedOpportunityIds.has(opportunity.id)) buckets.saved.push(opportunity);
+      if (hiddenOpportunityIds.has(opportunity.id)) buckets.hidden.push(opportunity);
       if (opportunity.isGiveaway) buckets.giveaways.push(opportunity);
       if (opportunity.source === 'freetogame') buckets.freetoplay.push(opportunity);
       if (opportunity.source === 'producthunt') buckets.launches.push(opportunity);
@@ -859,12 +1157,15 @@ export default function App() {
     }
 
     return buckets;
-  }, [preparedOpportunities, savedOpportunityIds]);
+  }, [hiddenOpportunityIds, preparedOpportunities, savedOpportunityIds]);
 
   const filterCounts = useMemo<Record<Filter, number>>(() => {
     const countVisible = (filterId: Filter) =>
       opportunityBuckets[filterId].filter(
         (opportunity) =>
+          (filterId === 'saved' ||
+            filterId === 'hidden' ||
+            !hiddenOpportunityIds.has(opportunity.id)) &&
           !shouldHideForLocation(
             opportunity,
             countryPreference,
@@ -877,6 +1178,7 @@ export default function App() {
     return {
       all: countVisible('all'),
       saved: savedOpportunityIds.size,
+      hidden: countVisible('hidden'),
       giveaways: countVisible('giveaways'),
       freetoplay: countVisible('freetoplay'),
       launches: countVisible('launches'),
@@ -886,7 +1188,32 @@ export default function App() {
       grants: countVisible('grants'),
       tenders: countVisible('tenders'),
     };
-  }, [countryPreference, opportunityBuckets, profileTypePreference, savedOpportunityIds.size]);
+  }, [
+    countryPreference,
+    hiddenOpportunityIds,
+    hiddenOpportunityIds.size,
+    opportunityBuckets,
+    profileTypePreference,
+    savedOpportunityIds.size,
+  ]);
+
+  const displayFilterCounts = useMemo<Record<Filter, number>>(
+    () => ({
+      ...filterCounts,
+      all: remoteCounts?.all ?? filterCounts.all,
+      giveaways: remoteCounts?.giveaways ?? filterCounts.giveaways,
+      freetoplay: remoteCounts?.freetoplay ?? filterCounts.freetoplay,
+      launches: remoteCounts?.launches ?? filterCounts.launches,
+      competitions: remoteCounts?.competitions ?? filterCounts.competitions,
+      feeds: remoteCounts?.feeds ?? filterCounts.feeds,
+      community: remoteCounts?.community ?? filterCounts.community,
+      grants: remoteCounts?.grants ?? filterCounts.grants,
+      tenders: remoteCounts?.tenders ?? filterCounts.tenders,
+      saved: savedOpportunityIds.size,
+      hidden: filterCounts.hidden,
+    }),
+    [filterCounts, remoteCounts, savedOpportunityIds.size],
+  );
 
   const secondaryFilterCounts = useMemo<Partial<Record<Filter, Record<string, number>>>>(() => {
     const counts: Partial<Record<Filter, Record<string, number>>> = {};
@@ -897,6 +1224,7 @@ export default function App() {
     ][]) {
       const eligibleOpportunities = opportunityBuckets[filterId].filter(
         (opportunity) =>
+          !hiddenOpportunityIds.has(opportunity.id) &&
           !shouldHideForLocation(
             opportunity,
             countryPreference,
@@ -913,15 +1241,27 @@ export default function App() {
           ).length,
         ]),
       );
+      if (remoteSecondaryFilterCounts[filterId]) {
+        counts[filterId] = {
+          ...counts[filterId],
+          ...remoteSecondaryFilterCounts[filterId],
+        };
+      }
     }
 
     return counts;
-  }, [countryPreference, opportunityBuckets, profileTypePreference]);
+  }, [
+    countryPreference,
+    hiddenOpportunityIds,
+    opportunityBuckets,
+    profileTypePreference,
+    remoteSecondaryFilterCounts,
+  ]);
 
   const visibleFilters = useMemo(() => {
-    if (loading && opportunities.length === 0) return filters;
-    return filters.filter((item) => filterCounts[item.id] > 0);
-  }, [filterCounts, loading, opportunities.length]);
+    if (loading && opportunities.length === 0) return filters.filter((item) => item.id !== 'hidden');
+    return filters.filter((item) => displayFilterCounts[item.id] > 0);
+  }, [displayFilterCounts, loading, opportunities.length]);
 
   const visibleSecondaryFilters = useMemo(() => {
     const items = secondaryFilters[filter];
@@ -941,9 +1281,59 @@ export default function App() {
   );
 
   useEffect(() => {
+    const remoteFilter = getRemoteFeedFilter(filter);
+    if (!remoteFilter) return;
+
+    const paginationKey = getPaginationKey(filter, activeSecondaryFilter);
+    if (feedOffsets[paginationKey] !== undefined) return;
+    if ((secondaryFilterCounts[filter]?.[activeSecondaryFilter] ?? 0) <= 0) return;
+    if (loadingMoreKeys.has(paginationKey)) return;
+
+    const subcategory =
+      secondaryFilters[filter] && activeSecondaryFilter !== 'all'
+        ? activeSecondaryFilter
+        : undefined;
+
+    setLoadingMoreKeys((current) => new Set(current).add(paginationKey));
+    void loadOpportunities({
+      filter: remoteFilter,
+      subcategory,
+      limit: OPPORTUNITY_PAGE_SIZE,
+      countryCode: countryPreference,
+      profileType: profileTypePreference,
+    })
+      .then((result) => {
+        setOpportunities((current) => mergeOpportunities(current, result.data));
+        setFeedOffsets((current) => ({
+          ...current,
+          [paginationKey]: result.data.length,
+        }));
+        setFeedHasMore((current) => ({
+          ...current,
+          [paginationKey]: result.data.length === OPPORTUNITY_PAGE_SIZE,
+        }));
+      })
+      .finally(() => {
+        setLoadingMoreKeys((current) => {
+          const next = new Set(current);
+          next.delete(paginationKey);
+          return next;
+        });
+      });
+  }, [
+    activeSecondaryFilter,
+    countryPreference,
+    feedOffsets,
+    filter,
+    loadingMoreKeys,
+    profileTypePreference,
+    secondaryFilterCounts,
+  ]);
+
+  useEffect(() => {
     if (loading && opportunities.length === 0) return;
     if (visibleFilters.length === 0) return;
-    if (filterCounts[filter] > 0) return;
+    if (displayFilterCounts[filter] > 0) return;
 
     const nextFilter = visibleFilters[0].id;
     listRef.current?.scrollToOffset({ offset: 0, animated: false });
@@ -955,7 +1345,7 @@ export default function App() {
     }));
   }, [
     filter,
-    filterCounts,
+    displayFilterCounts,
     firstVisibleSecondaryFilter,
     loading,
     opportunities.length,
@@ -982,16 +1372,25 @@ export default function App() {
 
   const activeFilterLabel = filters.find((item) => item.id === filter)?.label ?? 'Opportunities';
   const hasQuery = query.trim().length > 0;
-  const sectionTitle = filter === 'saved' ? 'Saved opportunities' : 'Latest opportunities';
+  const sectionTitle =
+    filter === 'saved'
+      ? 'Saved opportunities'
+      : filter === 'hidden'
+        ? 'Hidden opportunities'
+        : 'Latest opportunities';
   const emptyTitle =
     filter === 'saved'
       ? 'No saved opportunities yet'
+      : filter === 'hidden'
+        ? 'No hidden opportunities'
       : hasQuery
         ? 'No matches found'
         : `${activeFilterLabel} is empty`;
   const emptyMessage =
     filter === 'saved'
       ? 'Tap the star on any opportunity to keep it here.'
+      : filter === 'hidden'
+        ? 'Hidden opportunities will appear here.'
       : hasQuery
         ? 'Try a shorter search or switch filters.'
         : 'Pull to refresh or switch to another tab.';
@@ -1027,6 +1426,10 @@ export default function App() {
       const matchesSecondary =
         !secondaryFilters[appliedFilter] ||
         matchesSecondaryFilter(opportunity, appliedFilter, appliedSecondaryFilter);
+      const shouldHideByUser =
+        appliedFilter !== 'saved' &&
+        appliedFilter !== 'hidden' &&
+        hiddenOpportunityIds.has(opportunity.id);
       const shouldHideLocalLimited =
         shouldHideForLocation(
           opportunity,
@@ -1037,6 +1440,7 @@ export default function App() {
         );
       return (
         matchesSecondary &&
+        !shouldHideByUser &&
         !shouldHideLocalLimited &&
         (!hasNormalizedQuery || opportunity.searchText.includes(normalizedQuery))
       );
@@ -1056,16 +1460,156 @@ export default function App() {
     appliedSecondaryFilter,
     countryPreference,
     deferredQuery,
+    hiddenOpportunityIds,
     opportunityBuckets,
     profileTypePreference,
   ]);
   const isSwitchingOpportunities =
     appliedFilter !== filter || appliedSecondaryFilter !== activeSecondaryFilter;
+  const selectedPaginationKey = getPaginationKey(filter, activeSecondaryFilter);
+  const isLoadingSelectedFeed = loadingMoreKeys.has(selectedPaginationKey);
   const pagedOpportunities = useMemo(
     () => visibleOpportunities.slice(0, visibleLimit),
     [visibleLimit, visibleOpportunities],
   );
-  const hasMoreOpportunities = pagedOpportunities.length < visibleOpportunities.length;
+  const activePaginationKey = getPaginationKey(appliedFilter, appliedSecondaryFilter);
+  const activeRemoteFilter = getRemoteFeedFilter(appliedFilter);
+  const activeTotalCount =
+    secondaryFilters[appliedFilter] && appliedSecondaryFilter
+      ? secondaryFilterCounts[appliedFilter]?.[appliedSecondaryFilter] ?? visibleOpportunities.length
+      : displayFilterCounts[appliedFilter] ?? visibleOpportunities.length;
+  const hasMoreLocalOpportunities = pagedOpportunities.length < visibleOpportunities.length;
+  const canLoadMoreRemote =
+    !hasQuery &&
+    Boolean(activeRemoteFilter) &&
+    visibleOpportunities.length < activeTotalCount &&
+    Boolean(feedHasMore[activePaginationKey]) &&
+    !loadingMoreKeys.has(activePaginationKey);
+  const hasMoreOpportunities = hasMoreLocalOpportunities || canLoadMoreRemote;
+  const isLoadingMore =
+    loadingMoreKeys.has(activePaginationKey) ||
+    loadMoreFeedbackKey === activePaginationKey;
+  const handleLoadMore = useCallback(() => {
+    setLoadMoreFeedbackKey(activePaginationKey);
+    const nextPageStartIndex = pagedOpportunities.length;
+    const scrollToNextPage = () => {
+      requestAnimationFrame(() => {
+        listRef.current?.scrollToIndex({
+          index: nextPageStartIndex,
+          animated: true,
+          viewPosition: 0.08,
+        });
+      });
+    };
+
+    if (hasMoreLocalOpportunities) {
+      setTimeout(() => {
+        setVisibleLimit((current) => current + OPPORTUNITY_PAGE_SIZE);
+        setLoadMoreFeedbackKey((current) =>
+          current === activePaginationKey ? null : current,
+        );
+        setTimeout(scrollToNextPage, 80);
+      }, LOAD_MORE_FEEDBACK_MS);
+      return;
+    }
+
+    if (!activeRemoteFilter || !canLoadMoreRemote) return;
+
+    const offset = feedOffsets[activePaginationKey] ?? 0;
+    const subcategory =
+      secondaryFilters[appliedFilter] && appliedSecondaryFilter !== 'all'
+        ? appliedSecondaryFilter
+        : undefined;
+    const feedbackDelay = new Promise((resolve) =>
+      setTimeout(resolve, LOAD_MORE_FEEDBACK_MS),
+    );
+
+    setLoadingMoreKeys((current) => new Set(current).add(activePaginationKey));
+    void (async () => {
+      const knownIds = new Set(opportunities.map((opportunity) => opportunity.id));
+      const incomingOpportunities: Opportunity[] = [];
+      let nextOffset = offset;
+      let hasMoreRemote = true;
+      let visibleNewCount = 0;
+
+      for (let attempt = 0; attempt < 6; attempt += 1) {
+        const result = await loadOpportunities({
+          filter: activeRemoteFilter,
+          subcategory,
+          limit: OPPORTUNITY_PAGE_SIZE,
+          offset: nextOffset,
+          countryCode: countryPreference,
+          profileType: profileTypePreference,
+        });
+        nextOffset += result.data.length;
+        hasMoreRemote = result.data.length === OPPORTUNITY_PAGE_SIZE;
+
+        for (const opportunity of result.data) {
+          if (knownIds.has(opportunity.id)) continue;
+          knownIds.add(opportunity.id);
+          incomingOpportunities.push(opportunity);
+
+          const prepared = prepareOpportunity(opportunity);
+          const isVisibleInCurrentList =
+            !hiddenOpportunityIds.has(opportunity.id) &&
+            (!secondaryFilters[appliedFilter] ||
+              matchesSecondaryFilter(prepared, appliedFilter, appliedSecondaryFilter)) &&
+            !shouldHideForLocation(
+              prepared,
+              countryPreference,
+              profileTypePreference,
+              false,
+              appliedFilter,
+            );
+          if (isVisibleInCurrentList) visibleNewCount += 1;
+        }
+
+        if (visibleNewCount > 0 || !hasMoreRemote) break;
+      }
+
+      await feedbackDelay;
+
+      return { incomingOpportunities, nextOffset, hasMoreRemote, visibleNewCount };
+    })()
+      .then(({ incomingOpportunities, nextOffset, hasMoreRemote, visibleNewCount }) => {
+        setOpportunities((current) => mergeOpportunities(current, incomingOpportunities));
+        setFeedOffsets((current) => ({
+          ...current,
+          [activePaginationKey]: nextOffset,
+        }));
+        setFeedHasMore((current) => ({
+          ...current,
+          [activePaginationKey]: hasMoreRemote && visibleNewCount > 0,
+        }));
+        if (visibleNewCount > 0) {
+          setVisibleLimit((current) => current + OPPORTUNITY_PAGE_SIZE);
+          setTimeout(scrollToNextPage, 80);
+        }
+      })
+      .finally(() => {
+        setLoadingMoreKeys((current) => {
+          const next = new Set(current);
+          next.delete(activePaginationKey);
+          return next;
+        });
+        setLoadMoreFeedbackKey((current) =>
+          current === activePaginationKey ? null : current,
+        );
+      });
+  }, [
+    activePaginationKey,
+    activeRemoteFilter,
+    appliedFilter,
+    appliedSecondaryFilter,
+    canLoadMoreRemote,
+    countryPreference,
+    feedOffsets,
+    hasMoreLocalOpportunities,
+    hiddenOpportunityIds,
+    opportunities,
+    pagedOpportunities.length,
+    profileTypePreference,
+  ]);
 
   const renderOpportunity = useCallback(
     ({ item }: { item: Opportunity }) => (
@@ -1073,7 +1617,10 @@ export default function App() {
         opportunity={item}
         isSaved={savedOpportunityIds.has(item.id)}
         isSaving={savingOpportunityIds.has(item.id)}
+        isHidden={hiddenOpportunityIds.has(item.id)}
+        isHiding={hidingOpportunityIds.has(item.id)}
         onToggleSave={() => handleToggleSave(item.id)}
+        onToggleHide={() => handleToggleHide(item.id)}
         onPress={() => handleSelectOpportunity(item)}
         onOpenExternal={() => handleOpenOpportunity(item)}
       />
@@ -1081,7 +1628,10 @@ export default function App() {
     [
       handleOpenOpportunity,
       handleSelectOpportunity,
+      handleToggleHide,
       handleToggleSave,
+      hiddenOpportunityIds,
+      hidingOpportunityIds,
       savedOpportunityIds,
       savingOpportunityIds,
     ],
@@ -1516,6 +2066,24 @@ export default function App() {
                       </Text>
                     </Pressable>
                     <Pressable
+                      accessibilityRole="button"
+                      disabled={hidingOpportunityIds.has(selectedOpportunity.id)}
+                      onPress={() => handleToggleHide(selectedOpportunity.id)}
+                      style={[
+                        styles.detailSecondaryButton,
+                        hiddenOpportunityIds.has(selectedOpportunity.id) && styles.detailMutedButtonActive,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.detailSecondaryText,
+                          hiddenOpportunityIds.has(selectedOpportunity.id) && styles.detailMutedTextActive,
+                        ]}
+                      >
+                        {hiddenOpportunityIds.has(selectedOpportunity.id) ? 'Unhide' : 'Hide'}
+                      </Text>
+                    </Pressable>
+                    <Pressable
                       accessibilityRole="link"
                       onPress={() => handleOpenOpportunity(selectedOpportunity)}
                       style={styles.detailPrimaryButton}
@@ -1535,6 +2103,14 @@ export default function App() {
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
+          onScroll={handleScroll}
+          scrollEventThrottle={64}
+          onScrollToIndexFailed={(info) => {
+            listRef.current?.scrollToOffset({
+              offset: Math.max(0, info.averageItemLength * info.index),
+              animated: true,
+            });
+          }}
           initialNumToRender={4}
           maxToRenderPerBatch={4}
           updateCellsBatchingPeriod={50}
@@ -1632,7 +2208,7 @@ export default function App() {
               >
                 {visibleFilters.map((item) => {
                   const active = filter === item.id;
-                  const count = filterCounts[item.id];
+                  const count = displayFilterCounts[item.id];
                   return (
                     <Pressable
                       key={item.id}
@@ -1676,6 +2252,7 @@ export default function App() {
                 >
                   {visibleSecondaryFilters.map((item) => {
                     const active = activeSecondaryFilter === item.id;
+                    const count = secondaryFilterCounts[filter]?.[item.id] ?? 0;
                     return (
                       <Pressable
                         key={item.id}
@@ -1697,6 +2274,22 @@ export default function App() {
                         >
                           {item.label}
                         </Text>
+                        <View
+                          style={[
+                            styles.subfilterCountBadge,
+                            active && styles.subfilterCountBadgeActive,
+                          ]}
+                        >
+                          <Text
+                            numberOfLines={1}
+                            style={[
+                              styles.subfilterCountText,
+                              active && styles.subfilterCountTextActive,
+                            ]}
+                          >
+                            {count}
+                          </Text>
+                        </View>
                       </Pressable>
                     );
                   })}
@@ -1708,6 +2301,8 @@ export default function App() {
                 <Text style={styles.resultCount}>
                   {isSwitchingOpportunities
                     ? 'UPDATING'
+                    : isLoadingSelectedFeed
+                      ? 'LOADING'
                     : `${pagedOpportunities.length}/${visibleOpportunities.length} RESULTS`}
                 </Text>
               </View>
@@ -1726,11 +2321,13 @@ export default function App() {
           renderItem={renderOpportunity}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           ListEmptyComponent={
-            loading || isSwitchingOpportunities ? (
+            loading || isSwitchingOpportunities || isLoadingSelectedFeed ? (
               <View style={styles.emptyState}>
                 <ActivityIndicator color="#D9FF57" />
                 <Text style={styles.emptyText}>
-                  {isSwitchingOpportunities ? 'Updating opportunities...' : 'Loading opportunities...'}
+                  {isSwitchingOpportunities || isLoadingSelectedFeed
+                    ? 'Updating opportunities...'
+                    : 'Loading opportunities...'}
                 </Text>
               </View>
             ) : (
@@ -1743,24 +2340,45 @@ export default function App() {
           }
           ListFooterComponent={
             <View style={styles.footer}>
-              {!isSwitchingOpportunities && hasMoreOpportunities && (
+              {!isSwitchingOpportunities && (hasMoreOpportunities || isLoadingMore) && (
                 <Pressable
                   accessibilityRole="button"
-                  onPress={() =>
-                    setVisibleLimit((current) => current + OPPORTUNITY_PAGE_SIZE)
-                  }
+                  disabled={isLoadingMore}
+                  onPress={handleLoadMore}
                   style={({ pressed }) => [
                     styles.loadMoreButton,
+                    isLoadingMore && styles.loadMoreButtonLoading,
                     pressed && styles.authButtonPressed,
                   ]}
                 >
-                  <Text style={styles.loadMoreText}>Load more</Text>
+                  {isLoadingMore ? (
+                    <View style={styles.loadMoreLoadingContent}>
+                      <ActivityIndicator size="small" color="#071A1C" />
+                      <Text style={styles.loadMoreText}>Loading...</Text>
+                    </View>
+                  ) : (
+                    <Text style={styles.loadMoreText}>Load more</Text>
+                  )}
                 </Pressable>
               )}
               <Text style={styles.footerText}>Powered by Supabase · refreshed on demand</Text>
             </View>
           }
         />
+        {showScrollTopButton && (
+          <Pressable
+            accessibilityLabel="Scroll to top"
+            accessibilityRole="button"
+            hitSlop={10}
+            onPress={handleScrollToTop}
+            style={({ pressed }) => [
+              styles.scrollTopButton,
+              pressed && styles.scrollTopButtonPressed,
+            ]}
+          >
+            <Text style={styles.scrollTopIcon}>↑</Text>
+          </Pressable>
+        )}
       </SafeAreaView>
     </LinearGradient>
   );
@@ -1771,6 +2389,32 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     paddingTop: Platform.OS === 'android' ? NativeStatusBar.currentHeight ?? 0 : 0,
+  },
+  scrollTopButton: {
+    position: 'absolute',
+    top: Platform.OS === 'android' ? (NativeStatusBar.currentHeight ?? 0) + 14 : 56,
+    alignSelf: 'center',
+    minWidth: 56,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(11, 20, 21, 0.92)',
+    borderWidth: 1,
+    borderColor: '#3C5657',
+    shadowColor: '#000',
+    shadowOpacity: 0.34,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 8,
+    zIndex: 20,
+  },
+  scrollTopButtonPressed: { opacity: 0.82, transform: [{ scale: 0.96 }] },
+  scrollTopIcon: {
+    color: '#D9FF57',
+    fontSize: 22,
+    fontWeight: '900',
+    lineHeight: 24,
   },
   content: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 30 },
   topBar: {
@@ -1929,6 +2573,9 @@ const styles = StyleSheet.create({
   filterCountTextActive: { color: '#D9FF57' },
   subfilters: { flexDirection: 'row', gap: 7, marginTop: 10 },
   subfilterButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
     paddingHorizontal: 13,
     paddingVertical: 8,
     borderRadius: 100,
@@ -1939,6 +2586,29 @@ const styles = StyleSheet.create({
   subfilterButtonActive: { backgroundColor: '#193C39', borderColor: '#7DE0CF' },
   subfilterText: { color: '#7E8C8E', fontSize: 12, fontWeight: '700' },
   subfilterTextActive: { color: '#7DE0CF' },
+  subfilterCountBadge: {
+    minWidth: 22,
+    height: 18,
+    paddingHorizontal: 6,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#132123',
+    borderWidth: 1,
+    borderColor: '#2B3B3E',
+  },
+  subfilterCountBadgeActive: {
+    backgroundColor: '#D9FF57',
+    borderColor: '#D9FF57',
+  },
+  subfilterCountText: {
+    color: '#AFC0BD',
+    fontSize: 10,
+    fontWeight: '900',
+    lineHeight: 12,
+    textAlign: 'center',
+  },
+  subfilterCountTextActive: { color: '#071A1C' },
   sectionHeading: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -2107,8 +2777,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   detailSecondaryButtonActive: { backgroundColor: '#D9FF57', borderColor: '#D9FF57' },
+  detailMutedButtonActive: { backgroundColor: '#263536', borderColor: '#4B6263' },
   detailSecondaryText: { color: '#DCE8E5', fontSize: 14, fontWeight: '900' },
   detailSecondaryTextActive: { color: '#071A1C' },
+  detailMutedTextActive: { color: '#DCE8E5' },
   settingsPanel: {
     padding: 6,
     marginTop: 8,
@@ -2245,6 +2917,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 22,
   },
+  loadMoreButtonLoading: { opacity: 0.9, backgroundColor: '#C9F044' },
+  loadMoreLoadingContent: { flexDirection: 'row', alignItems: 'center', gap: 9 },
   loadMoreText: { color: '#071A1C', fontSize: 14, fontWeight: '900' },
   footerText: { color: '#455355', fontSize: 10, letterSpacing: 0.4 },
 });
